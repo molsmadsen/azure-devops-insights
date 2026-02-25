@@ -18,7 +18,7 @@ The plugin is distributed via the Claude Code marketplace. Installation is a two
 
 **Step 1 — Add the marketplace source:**
 ```
-/plugin marketplace add your-org/azure-devops-insights
+/plugin marketplace add molsmadsen/azure-devops-insights
 ```
 
 **Step 2 — Install the plugin:**

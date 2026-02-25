@@ -1,0 +1,12 @@
+# Local Claude Code settings
+.claude/
+
+# GSD planning internals
+.planning/
+
+# Node
+node_modules/
+
+# Secrets / credentials
+*.env
+.env*
