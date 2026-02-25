@@ -41,6 +41,94 @@ export async function adoGet(path, params = {}, configOverride = null) {
   return response.json();
 }
 
+export async function adoGetPrsByProject(config, params = {}) {
+  const orgBase = config.orgUrl.replace(/\/$/, '');
+  const url = new URL(`${orgBase}/${config.project}/_apis/git/pullrequests`);
+  url.searchParams.set('api-version', '7.1');
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+  }
+  let response;
+  try {
+    response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': buildAuthHeader(config.pat),
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (err) {
+    throw Object.assign(new Error('Network error: cannot reach ' + config.orgUrl + '. Check the org URL.'), { type: 'network' });
+  }
+  if (!response.ok) {
+    throw Object.assign(new Error('PR fetch failed: ' + response.status), { type: 'api', status: response.status });
+  }
+  return response.json();
+}
+
+export async function adoGetPrsByRepo(config, repoId, params = {}) {
+  const orgBase = config.orgUrl.replace(/\/$/, '');
+  const url = new URL(`${orgBase}/${config.project}/_apis/git/repositories/${repoId}/pullrequests`);
+  url.searchParams.set('api-version', '7.1');
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+  }
+  let response;
+  try {
+    response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': buildAuthHeader(config.pat),
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (err) {
+    throw Object.assign(new Error('Network error: cannot reach ' + config.orgUrl + '. Check the org URL.'), { type: 'network' });
+  }
+  if (!response.ok) {
+    throw Object.assign(new Error('PR fetch failed: ' + response.status), { type: 'api', status: response.status });
+  }
+  return response.json();
+}
+
+export async function adoGetPrThreads(config, repoId, prId) {
+  const orgBase = config.orgUrl.replace(/\/$/, '');
+  const url = new URL(`${orgBase}/${config.project}/_apis/git/repositories/${repoId}/pullRequests/${prId}/threads`);
+  url.searchParams.set('api-version', '7.1');
+  let response;
+  try {
+    response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': buildAuthHeader(config.pat),
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (err) {
+    return { value: [] };
+  }
+  if (!response.ok) return { value: [] };
+  return response.json();
+}
+
+export async function adoGetRepos(config) {
+  const orgBase = config.orgUrl.replace(/\/$/, '');
+  const url = new URL(`${orgBase}/${config.project}/_apis/git/repositories`);
+  url.searchParams.set('api-version', '7.1');
+  let response;
+  try {
+    response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': buildAuthHeader(config.pat),
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (err) {
+    throw Object.assign(new Error('Network error: cannot reach ' + config.orgUrl + '. Check the org URL.'), { type: 'network' });
+  }
+  if (!response.ok) {
+    throw Object.assign(new Error('PR fetch failed: ' + response.status), { type: 'api', status: response.status });
+  }
+  return response.json();
+}
+
 export async function validateConnection(orgUrl, project, pat) {
   const orgBase = orgUrl.replace(/\/$/, '');
   const headers = { 'Authorization': buildAuthHeader(pat), 'Content-Type': 'application/json' };
