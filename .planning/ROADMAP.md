@@ -102,10 +102,10 @@ Plans:
   3. README.md local dev command uses `claude --plugin-dir .`
   4. REQUIREMENTS.md requirement text matches actual implementation (correct prefix, correct install flow, correct storage description)
   5. `02-01-SUMMARY.md` frontmatter includes `requirements-completed: [PR-01, PR-02, PR-03, PR-04, PR-05]`
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 05-01: Fix user-visible docs (skills/help/SKILL.md, README.md) and planning artifacts (REQUIREMENTS.md, 02-01-SUMMARY.md)
+- [ ] 05-01-PLAN.md — Fix user-visible docs (skills/help/SKILL.md, README.md) and planning artifacts (REQUIREMENTS.md, 02-01-SUMMARY.md)
 
 ## Progress
 
