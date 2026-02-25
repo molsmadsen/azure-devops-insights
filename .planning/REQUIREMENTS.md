@@ -7,15 +7,15 @@
 
 ### Distribution & Lifecycle
 
-- [x] **DIST-01**: User can install the skill pack globally with a single command (`claude plugin add github:org/repo`)
+- [x] **DIST-01**: User can install the skill pack via the two-step marketplace flow: `/plugin marketplace add` then `/plugin install adi@azure-devops-insights`
 - [ ] **DIST-02**: User can update the skill pack to the latest version with `/ado:update`
 - [ ] **DIST-03**: Update command shows changelog between current and new version
 
 ### Setup & Auth
 
-- [x] **AUTH-01**: User can run `/ado:setup` to configure org URL, project name, and PAT -- stored securely (OS credential store / keychain)
+- [x] **AUTH-01**: User can run `/adi:setup` to configure org URL, project name, and PAT -- stored at `~/.adi/config.json` with 0o600 permissions
 - [x] **AUTH-02**: Setup validates the PAT has sufficient permissions by making a test API call and reports which scopes are missing
-- [x] **AUTH-03**: User can re-run `/ado:setup` to reconfigure credentials without data loss
+- [x] **AUTH-03**: User can re-run `/adi:setup` to reconfigure credentials without data loss
 
 ### PR Metrics
 
@@ -76,7 +76,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DIST-01 | Phase 1 | Complete |
+| DIST-01 | Phase 1 + Phase 5 (gap closure) | Complete (doc gap → Phase 5) |
 | AUTH-01 | Phase 1 | Complete |
 | AUTH-02 | Phase 1 | Complete |
 | AUTH-03 | Phase 1 | Complete |
@@ -85,7 +85,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PR-03 | Phase 2 | Complete |
 | PR-04 | Phase 2 | Complete |
 | PR-05 | Phase 2 | Complete |
-| PR-06 | Phase 2 | Complete |
+| PR-06 | Phase 2 + Phase 5 (gap closure) | Complete (doc gap → Phase 5) |
 | CONT-01 | Phase 3 | Pending |
 | CONT-02 | Phase 3 | Pending |
 | CONT-03 | Phase 3 | Pending |
@@ -107,4 +107,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-25*
-*Last updated: 2026-02-25 after plan 02-02 completion — all Phase 2 requirements complete*
+*Last updated: 2026-02-25 after v1.0 audit — Phase 5 gap closure added for DIST-01 and PR-06 documentation gaps; stale requirement text corrected*

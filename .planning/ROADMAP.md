@@ -16,6 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: PR Metrics** - First skill proving the end-to-end pattern with pull request analysis (completed 2026-02-25)
 - [ ] **Phase 3: Activity Skills** - Contributors and bugs skills following the proven pattern
 - [ ] **Phase 4: Project State & Distribution** - Sprint/summary synthesis and distribution polish
+- [ ] **Phase 5: v1.0 Doc & Traceability Cleanup** - Close all documentation gaps identified by milestone audit before v1.0 release
 
 ## Phase Details
 
@@ -79,6 +80,33 @@ Plans:
 - [ ] 04-01: TBD
 - [ ] 04-02: TBD
 
+### Phase 5: v1.0 Doc & Traceability Cleanup
+**Goal**: All user-facing documentation accurately reflects shipped functionality and all planning artifacts are internally consistent before v1.0 is archived
+**Depends on**: Phase 2 (audit gap closure — can run in parallel with Phase 3)
+**Requirements**: DIST-01, PR-06 (gap closure — requirements already functionally satisfied)
+**Gap Closure:** Closes gaps from v1.0-MILESTONE-AUDIT.md
+
+**Gaps Closed:**
+- `help-stale-pr-metrics` (HIGH): `/adi:pr-metrics` listed as "Coming soon" in `skills/help/SKILL.md` — Phase 2 is shipped
+- `readme-stale-pr-metrics` (MEDIUM): README.md Skills Reference missing `/adi:pr-metrics` row
+- `readme-dev-path` (LOW): README.md local dev command path `./azure-devops-insights` → `.`
+
+**Tech Debt Cleared:**
+- `REQUIREMENTS.md`: stale `/ado:setup` references in AUTH-01/AUTH-03 → `/adi:setup`
+- `REQUIREMENTS.md`: DIST-01 description references non-existent `claude plugin add github:org/repo` single-command install
+- `02-01-SUMMARY.md`: missing `requirements-completed` frontmatter (PR-01 through PR-05)
+
+**Success Criteria** (what must be TRUE):
+  1. `skills/help/SKILL.md` lists `/adi:pr-metrics` in the available commands table — not in "Coming soon"
+  2. README.md Skills Reference table includes a `/adi:pr-metrics` row; "Coming Soon (Phase 2+)" no longer lists it
+  3. README.md local dev command uses `claude --plugin-dir .`
+  4. REQUIREMENTS.md requirement text matches actual implementation (correct prefix, correct install flow, correct storage description)
+  5. `02-01-SUMMARY.md` frontmatter includes `requirements-completed: [PR-01, PR-02, PR-03, PR-04, PR-05]`
+**Plans**: TBD
+
+Plans:
+- [ ] 05-01: Fix user-visible docs (skills/help/SKILL.md, README.md) and planning artifacts (REQUIREMENTS.md, 02-01-SUMMARY.md)
+
 ## Progress
 
 **Execution Order:**
@@ -90,3 +118,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 2. PR Metrics | 2/2 | Complete   | 2026-02-25 |
 | 3. Activity Skills | 0/0 | Not started | - |
 | 4. Project State & Distribution | 0/0 | Not started | - |
+| 5. v1.0 Doc & Traceability Cleanup | 0/1 | Not started | - |
