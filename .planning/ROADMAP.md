@@ -31,8 +31,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Plugin scaffold: plugin.json, marketplace.json, README, CHANGELOG
-- [ ] 01-02-PLAN.md — Shared scripts: config.mjs (config read/write/mask), ado-client.mjs (API client with PAT auth and error classification)
+- [x] 01-01-PLAN.md — Plugin scaffold: plugin.json, marketplace.json, README, CHANGELOG
+- [x] 01-02-PLAN.md — Shared scripts: config.mjs (config read/write/mask), ado-client.mjs (API client with PAT auth and error classification)
 - [ ] 01-03-PLAN.md — Setup and help skills: setup.mjs, skills/setup/SKILL.md, skills/help/SKILL.md
 - [ ] 01-04-PLAN.md — End-to-end verification checkpoint
 
@@ -86,7 +86,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/4 | Not started | - |
+| 1. Foundation | 2/4 | In progress | - |
 | 2. PR Metrics | 0/0 | Not started | - |
 | 3. Activity Skills | 0/0 | Not started | - |
 | 4. Project State & Distribution | 0/0 | Not started | - |
