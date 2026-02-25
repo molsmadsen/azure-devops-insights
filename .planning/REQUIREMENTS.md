@@ -7,7 +7,7 @@
 
 ### Distribution & Lifecycle
 
-- [ ] **DIST-01**: User can install the skill pack globally with a single command (`claude plugin add github:org/repo`)
+- [x] **DIST-01**: User can install the skill pack globally with a single command (`claude plugin add github:org/repo`)
 - [ ] **DIST-02**: User can update the skill pack to the latest version with `/ado:update`
 - [ ] **DIST-03**: Update command shows changelog between current and new version
 
@@ -76,7 +76,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DIST-01 | Phase 1 | Pending |
+| DIST-01 | Phase 1 | Complete |
 | AUTH-01 | Phase 1 | Pending |
 | AUTH-02 | Phase 1 | Complete |
 | AUTH-03 | Phase 1 | Pending |
