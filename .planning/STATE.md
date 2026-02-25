@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-25)
 ## Current Position
 
 Phase: 2 of 4 (PR Metrics)
-Plan: 1 of 3 in current phase
-Status: In progress — Plan 02-01 complete, moving to 02-02
-Last activity: 2026-02-25 -- Completed plan 02-01 (ADO client PR functions + pr-metrics.mjs computation script)
+Plan: 2 of 3 in current phase
+Status: In progress — Plan 02-02 complete, moving to 02-03
+Last activity: 2026-02-25 -- Completed plan 02-02 (skills/pr-metrics/SKILL.md — AI narration wiring, human-verified end-to-end)
 
-Progress: [█████░░░░░] 37%
+Progress: [██████░░░░] 50%
 
 ## Performance Metrics
 
@@ -28,14 +28,15 @@ Progress: [█████░░░░░] 37%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 4 | 5 min | 1.25 min |
-| 02-pr-metrics | 1 | 2 min | 2.47 min |
+| 02-pr-metrics | 2 | 4 min | 2.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (1 min), 01-02 (1 min), 01-03 (2 min), 01-04 (1 min), 02-01 (2 min)
+- Last 5 plans: 01-02 (1 min), 01-03 (2 min), 01-04 (1 min), 02-01 (2 min), 02-02 (2 min)
 - Trend: On track
 
 *Updated after each plan completion*
 | Phase 02-pr-metrics P01 | 148s | 2 tasks | 2 files |
+| Phase 02-pr-metrics P02 | 2min | 2 tasks | 1 file |
 
 ## Accumulated Context
 
@@ -60,6 +61,8 @@ Recent decisions affecting current work:
 - [02-01]: Thread fetching covers all PRs (not just active/completed subset) — needed for both staleness and first-review computation
 - [02-01]: Bottleneck selection: slow-reviewer type wins when slow and concentrated apply to different reviewers (most actionable signal)
 - [02-01]: 429 retry heuristic: all-empty batch triggers one retry after 2s (conservative, avoids false rate-limit positives)
+- [02-02]: Recommendations section conditional on data — only appears when actual issues found (aboveThresholdCount > 0, bottleneck != null, stalePrs.length > 0, or absentReviewers.length > 0); avoids filler on healthy repos
+- [02-02]: Human-verified end-to-end: narrative readable and correct; opens with PR/repo/window summary, all 5 data sections present, flags pass through, error paths confirmed
 
 ### Pending Todos
 
@@ -73,5 +76,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 02-01-PLAN.md (PR data layer — ado-client PR functions + pr-metrics.mjs)
+Stopped at: Completed 02-02-PLAN.md (skills/pr-metrics/SKILL.md — AI narration wiring, human-verified end-to-end)
 Resume file: None
