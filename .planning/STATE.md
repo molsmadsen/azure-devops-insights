@@ -2,17 +2,16 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-25)
+See: .planning/PROJECT.md (updated 2026-02-25 after v1.0 milestone)
 
-**Core value:** A developer runs a skill, gets a clear AI-narrated report about their Azure DevOps project, and immediately knows what needs attention.
-**Current focus:** Phase 2: PR Metrics Skill
+**Core value:** A developer can run a skill, get a clear written narrative about what's happening in their Azure DevOps project, and immediately know what needs attention.
+**Current focus:** Planning next milestone (v1.1 — Phase 3: Activity Skills, Phase 4: Project State & Distribution)
 
 ## Current Position
 
-Phase: 5 of 5 (Doc Cleanup)
-Plan: 1 of 1 in current phase
-Status: In progress — Plan 05-01 complete
-Last activity: 2026-02-25 -- Completed plan 05-01 (gap closure: help skill, README, 02-01-SUMMARY traceability)
+Phase: v1.0 COMPLETE — 3 phases shipped (1, 2, 5)
+Status: Milestone archived — ready for v1.1 planning
+Last activity: 2026-02-25 — v1.0 milestone complete and archived
 
 Progress: [██████████] 100%
 
