@@ -57,12 +57,12 @@ On success, you will see a confirmation with your org and project name, and a no
 |---------|-------------|
 | `/adi:setup` | Configure your Azure DevOps connection (org URL, project name, PAT). Run this first. Re-run to update credentials. |
 | `/adi:help` | List all available commands and their purpose. |
+| `/adi:pr-metrics` | AI-narrated pull request health report — review times, stale PRs, bottlenecks. |
 
-### Coming Soon (Phase 2+)
+### Coming Soon (Phase 3+)
 
 | Command | Description |
 |---------|-------------|
-| `/adi:pr-metrics` | Pull request throughput, review times, and merge rates |
 | `/adi:contributors` | Contributor activity and commit distribution |
 | `/adi:bugs` | Bug trend and open issue summary |
 | `/adi:sprint` | Current sprint health and completion forecast |
@@ -76,7 +76,7 @@ On success, you will see a confirmation with your org and project name, and a no
 To test the plugin locally without installing it from the marketplace:
 
 ```bash
-claude --plugin-dir ./azure-devops-insights
+claude --plugin-dir .
 ```
 
 This makes all `/adi:*` skills available immediately. The `CLAUDE_PLUGIN_ROOT` environment variable is set correctly in this mode.
