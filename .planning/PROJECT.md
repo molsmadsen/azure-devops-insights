@@ -10,6 +10,17 @@ An open-source collection of Claude Code skills (slash commands) that connect to
 
 A developer can run a skill, get a clear written narrative about what's happening in their Azure DevOps project, and immediately know what needs attention.
 
+## Current Milestone: v1.1 Activity Skills & Distribution
+
+**Goal:** Ship four new Azure DevOps analysis skills and a self-update command, completing the core skill collection.
+
+**Target features:**
+- `/adi:contributors` — who is active, who has gone quiet
+- `/adi:bugs` — open bugs by severity, trends, oldest unresolved
+- `/adi:sprint` — current sprint completion, velocity, backlog health
+- `/adi:summary` — AI narrative synthesizing PRs, contributors, bugs, sprint
+- `/adi:update` — self-update the skill pack with changelog display
+
 ## Requirements
 
 ### Validated
@@ -74,4 +85,4 @@ A developer can run a skill, get a clear written narrative about what's happenin
 | `adoGet` not used by Phase 2+ | Different calling convention (implicit loadConfig) causes confusion | ⚠️ Revisit — document clearly for Phase 3 authors |
 
 ---
-*Last updated: 2026-02-25 after v1.0 milestone*
+*Last updated: 2026-02-25 after v1.1 milestone started*
