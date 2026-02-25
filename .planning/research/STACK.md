@@ -1,298 +1,511 @@
 # Technology Stack
 
-**Project:** Azure DevOps Insights -- Claude Code Skill Pack
+**Project:** Azure DevOps Insights — v1.1 New Skills
 **Researched:** 2026-02-25
+**Confidence:** HIGH (all endpoints verified against official Microsoft Learn docs at api-version 7.1)
 
-## Recommended Stack
+---
 
-### Distribution Format: Claude Code Plugin (not raw npm)
+## Scope of This Document
 
-Claude Code has a first-class plugin system. This project should ship as a **Claude Code plugin** hosted on GitHub and installable via:
+This document covers ONLY the new technical surface area introduced by v1.1. The v1.0 stack
+(Node.js ESM .mjs, native fetch, PAT auth, zero npm deps, plugin manifest) is already validated
+and documented. Do not re-research it.
 
-```bash
-claude plugin add github:your-org/ado-insights
+New surface area: five API service areas, two new Node.js aggregation patterns, and the
+self-update mechanism.
+
+---
+
+## New API Endpoints by Skill
+
+### /adi:contributors — Git Commits API
+
+**Why this endpoint:** PR reviewers (already collected) tell half the story. Commit activity
+per author tells the other half — who is actually merging code vs. who is just reviewing.
+Combining commit frequency with PR authorship gives the "active/quiet" signal.
+
+**Endpoint:**
+```
+GET https://dev.azure.com/{org}/{project}/_apis/git/repositories/{repoId}/commits
+    ?api-version=7.1
+    &searchCriteria.fromDate={ISO8601}
+    &searchCriteria.$top=1000
 ```
 
-This is the canonical 2026 distribution mechanism. It installs to `~/.claude/plugins/ado-insights/` at user scope (all projects) or `.claude/plugins/` at project scope. No npm publish required, no postinstall hacks, no `--add-dir` wiring.
+**Required PAT scope:** `Code (Read)` — already required by /adi:setup for repo listing.
 
-**Why not npm?** npm global install was the 2024-early 2025 pattern. Claude Code's plugin system (`claude plugin add`) launched with v1.0.33 and is now the standard. Plugin installation handles discovery, updates (`claude plugin update`), and removal (`claude plugin remove`) natively. npm adds friction (Node.js dependency, PATH issues, sudo problems) for zero benefit.
-
-**Confidence: HIGH** -- Official Claude Code docs describe plugin system, `claude plugin add github:` syntax confirmed.
-
-### Plugin Structure
-
-```
-ado-insights/
-  .claude-plugin/
-    plugin.json                    # Plugin manifest (required)
-  skills/
-    setup/
-      SKILL.md                     # /ado-insights:setup -- configure org, project, PAT
-    pr-metrics/
-      SKILL.md                     # /ado-insights:pr-metrics -- PR review bottlenecks
-      reference.md                 # API endpoint details, field mappings
-    contributors/
-      SKILL.md                     # /ado-insights:contributors -- team activity
-    bugs/
-      SKILL.md                     # /ado-insights:bugs -- bug severity and trends
-    project-state/
-      SKILL.md                     # /ado-insights:project-state -- sprint/backlog health
-  scripts/
-    ado-client.mjs                 # Shared Azure DevOps API client (fetch + auth + pagination)
-    config.mjs                     # Config reader/writer (~/.ado-insights/config.json)
-    pr-metrics.mjs                 # Data fetching + aggregation for PR metrics
-    contributors.mjs               # Data fetching + aggregation for contributors
-    bug-report.mjs                 # Data fetching + aggregation for bugs
-    project-state.mjs              # Data fetching + aggregation for project state
-    setup.mjs                      # Setup wizard (validates PAT, writes config)
-  CLAUDE.md                        # Plugin-level memory (conventions, API patterns)
-```
-
-**Confidence: HIGH** -- Plugin structure documented in official Claude Code plugin docs. Skill names use plugin namespace (`ado-insights:skill-name`).
-
-### Plugin Manifest
-
+**Key response fields (GitCommitRef[]):**
 ```json
 {
-  "name": "ado-insights",
-  "description": "AI-narrated Azure DevOps project health reports",
-  "version": "1.0.0",
+  "commitId": "9991b4f...",
   "author": {
-    "name": "Your Name"
+    "name": "Alice Smith",
+    "email": "alice@example.com",
+    "date": "2026-02-01T10:00:00Z"
   },
-  "repository": "https://github.com/your-org/ado-insights",
-  "license": "MIT"
+  "committer": {
+    "name": "Alice Smith",
+    "email": "alice@example.com",
+    "date": "2026-02-01T10:00:00Z"
+  },
+  "comment": "Fix login redirect"
 }
 ```
 
-### Core Framework
+**Implementation notes:**
+- Must iterate per-repo (endpoint requires a `repositoryId`). Use existing `adoGetRepos` to
+  enumerate repos first, then fan-out per repo.
+- Use `searchCriteria.author` for per-author filtering OR fetch all and group by
+  `author.email` in Node.js (grouping in JS is simpler than N per-author API calls).
+- `author.date` is the commit date; `committer.date` is when it landed (merge commits diverge).
+  Use `author.date` for "who wrote it" and `committer.date` for "when it merged".
+- Pagination: use `searchCriteria.$top=1000` and `searchCriteria.$skip=N`. Follow the existing
+  `fetchPagedPrs` pattern from pr-metrics.mjs.
+- "Gone quiet" definition: author has commits in the prior window but zero in the recent window.
+  Use a two-window fetch (e.g., 30-day recent vs. 90-day full) to identify regression.
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Claude Code Skills (SKILL.md) | Current | Slash command definitions | Native format -- skills ARE the product. Each skill is a markdown file with YAML frontmatter and prompt instructions. Claude executes the instructions using its built-in tools. |
-| Node.js scripts (.mjs) | 18+ (bundled with Claude Code) | API calls, data aggregation | Node.js is guaranteed present because Claude Code requires it. Using `.mjs` scripts (ES modules) with native `fetch()` gives cross-platform compatibility (Windows, macOS, Linux) without any additional dependencies. Shell scripts break on Windows. |
-| Native `fetch()` API | Node 18+ built-in | HTTP calls to Azure DevOps | No npm dependencies needed. `fetch()` is built into Node.js 18+. No axios, no node-fetch, no dependencies at all. |
+**Confidence: HIGH** — Endpoint verified at
+https://learn.microsoft.com/en-us/rest/api/azure/devops/git/commits/get-commits?view=azure-devops-rest-7.1
 
-**Confidence: HIGH** -- Claude Code requires Node.js 18+. Native fetch is stable in Node 18+. Zero-dependency approach is validated.
+---
 
-### Why Node.js Scripts Instead of Bash/curl
+### /adi:bugs — Work Item Tracking (WIQL + Batch)
 
-The initial instinct is bash scripts with curl -- simpler, fewer files. But this project must work on Windows, where:
-- Bash is only available via Git Bash or WSL (not guaranteed)
-- `curl` behavior differs between Windows curl.exe and Unix curl
-- Path separators, line endings, and command availability vary
-- `jq` is not installed by default on Windows
+**Why this approach:** There is no single "get all bugs" endpoint. Azure DevOps work items
+require a two-step flow: (1) run a WIQL query to get matching IDs, (2) batch-fetch the full
+work item records with specific fields. WIQL is the only way to filter by work item type
+and state server-side.
 
-Node.js scripts solve all of this because Claude Code already requires Node.js. The scripts use only built-in Node.js APIs (`fetch`, `fs`, `path`, `os`, `Buffer`) -- zero npm dependencies.
+**Step 1 — WIQL query (POST):**
+```
+POST https://dev.azure.com/{org}/{project}/_apis/wit/wiql?api-version=7.1
+     &$top=500
 
-**Confidence: HIGH** -- Cross-platform concern is well-documented. Node.js is the safest choice for a tool that must work everywhere Claude Code works.
+Body: {
+  "query": "SELECT [System.Id] FROM WorkItems
+            WHERE [System.WorkItemType] = 'Bug'
+            AND [System.State] <> 'Closed'
+            AND [System.State] <> 'Resolved'
+            ORDER BY [Microsoft.VSTS.Common.Severity] ASC,
+                     [System.CreatedDate] ASC"
+}
+```
 
-### Azure DevOps REST API
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Azure DevOps REST API | 7.1 (GA) | All data access | 7.1 is the current GA version. 7.2 exists in preview but 7.1 is stable and fully documented. Use 7.1 for reliability. |
-| PAT Authentication | N/A | API auth | Basic auth with PAT is the simplest mechanism. Encode as Base64 of `:PAT` and pass as `Authorization: Basic <token>` header. |
-
-**Key API endpoints needed:**
-
-| Endpoint | API Area | Used By |
-|----------|----------|---------|
-| `GET {org}/{project}/_apis/git/repositories` | Git | All skills (list repos) |
-| `GET {org}/{project}/_apis/git/repositories/{repo}/pullrequests` | Git | PR metrics |
-| `GET {org}/{project}/_apis/git/repositories/{repo}/pullrequests/{id}/reviewers` | Git | PR metrics |
-| `GET {org}/{project}/_apis/git/repositories/{repo}/pullrequests/{id}/threads` | Git | PR metrics |
-| `POST {org}/{project}/_apis/wit/wiql` | Work Item Tracking | Bugs, project state |
-| `GET {org}/{project}/_apis/wit/workitems?ids={ids}` | Work Item Tracking | Bugs, project state |
-| `GET {org}/{project}/_apis/work/teamsettings/iterations` | Work | Sprint data |
-| `GET {org}/{project}/_apis/git/repositories/{repo}/commits` | Git | Contributors |
-| `GET {org}/_apis/projects/{project}/teams/{team}/members` | Core | Contributors |
-| `GET {org}/_apis/projects` | Core | Setup (validate connection) |
-
-**Base URL pattern:** `https://dev.azure.com/{organization}/{project}/_apis/{area}/{resource}?api-version=7.1`
-
-**Important:** Accept full base URL in config (not just org name) to support Azure DevOps Server on-premises URLs like `https://tfs.company.com/tfs/{collection}`.
-
-**Confidence: HIGH** -- Microsoft Learn documentation confirms all endpoints and 7.1 GA status.
-
-### Configuration & Auth
-
-| Technology | Purpose | Why |
-|------------|---------|-----|
-| `~/.ado-insights/config.json` | Store org URL, project name, PAT | Simple JSON file in user home dir. Never committed to repos. Readable by Node.js scripts with built-in `fs` module. |
-| Node.js config module (`config.mjs`) | Read/write/validate config | Cross-platform path handling via `os.homedir()` and `path.join()`. |
-
-**Config file format:**
-
+Response shape:
 ```json
 {
-  "orgUrl": "https://dev.azure.com/my-org",
-  "project": "MyProject",
-  "pat": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  "defaultRepository": "main-repo"
+  "queryType": "flat",
+  "workItems": [
+    { "id": 300, "url": "..." },
+    { "id": 299, "url": "..." }
+  ]
 }
 ```
 
-**Security approach:**
-- PAT stored in plaintext in user home dir (matches pattern used by gh CLI `~/.config/gh/hosts.yml`, az CLI `~/.azure/`, AWS CLI `~/.aws/credentials`)
-- Config dir created with restrictive permissions where OS supports it
-- Never read config from project directory (prevents accidental commits)
-- Setup skill warns user to use minimal-scope PATs (read-only)
-- Support `ADO_PAT` environment variable as override (for CI/automation scenarios)
-- Document exact required PAT scopes: `Code (Read)`, `Work Items (Read)`, `Project and Team (Read)`
+**Step 2 — Work Items Batch (POST):**
+```
+POST https://dev.azure.com/{org}/{project}/_apis/wit/workitemsbatch?api-version=7.1
 
-**Confidence: HIGH** -- Matches patterns used by gh CLI, az CLI, AWS CLI, and similar tools.
+Body: {
+  "ids": [300, 299, 298],
+  "fields": [
+    "System.Id",
+    "System.Title",
+    "System.State",
+    "System.CreatedDate",
+    "System.AssignedTo",
+    "Microsoft.VSTS.Common.Severity",
+    "Microsoft.VSTS.Common.Priority",
+    "System.Tags"
+  ],
+  "errorPolicy": "omit"
+}
+```
 
-### Development & Testing
+Response shape:
+```json
+{
+  "count": 3,
+  "value": [
+    {
+      "id": 300,
+      "fields": {
+        "System.Id": 300,
+        "System.Title": "Login fails on mobile Safari",
+        "System.State": "Active",
+        "System.CreatedDate": "2025-11-01T00:00:00Z",
+        "System.AssignedTo": { "displayName": "Alice", "id": "..." },
+        "Microsoft.VSTS.Common.Severity": "2 - High",
+        "Microsoft.VSTS.Common.Priority": 1
+      }
+    }
+  ]
+}
+```
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `--plugin-dir` flag | Current | Local plugin testing | `claude --plugin-dir ./ado-insights` loads the plugin without installation. Edit-test cycle is instant. |
-| Node.js built-in test runner | Node 18+ | Script unit tests | `node --test` is built-in since Node 18. No test framework dependency needed. Test the API client and config module in isolation. |
-| ESLint | 9.x | Script linting | Catches errors in .mjs scripts. Flat config format (eslint.config.js). |
+**Required PAT scope:** `Work Items (Read)` — must be added to /adi:setup scope validation.
+This is a NEW scope requirement not present in v1.0.
 
-**Confidence: MEDIUM** -- `--plugin-dir` confirmed in docs. Node built-in test runner is stable. ESLint 9.x flat config is current.
+**Key field reference names:**
+| Friendly Name | Reference Name |
+|--------------|----------------|
+| Severity | `Microsoft.VSTS.Common.Severity` |
+| Priority | `Microsoft.VSTS.Common.Priority` |
+| State | `System.State` |
+| Created Date | `System.CreatedDate` |
+| Assigned To | `System.AssignedTo` (returns identity object with `displayName`) |
+| Title | `System.Title` |
 
-## What NOT to Use
+**Severity values** (standard ADO process templates): `"1 - Critical"`, `"2 - High"`,
+`"3 - Medium"`, `"4 - Low"`. Custom process templates may differ — treat as opaque strings
+and group by value.
 
-| Technology | Why Not |
-|------------|---------|
-| **TypeScript** | Adds a build step (compilation) for scripts that are 50-200 lines each. Plain .mjs with JSDoc type comments gives IDE support without build complexity. Zero-build is a feature. |
-| **azure-devops-node-api (npm)** | Microsoft's official Node.js client library. Requires `npm install`, adds 50+ transitive dependencies, pulls in the entire azure-devops-node-api. Native `fetch()` with Basic auth does the same thing in 5 lines. Overkill for read-only GET requests. |
-| **axios / node-fetch / got** | HTTP client libraries. Unnecessary because Node.js 18+ has built-in `fetch()`. Adding any npm dependency adds `node_modules`, `package-lock.json`, and install steps -- all unnecessary. |
-| **npm global install pattern** | Deprecated distribution path for Claude Code extensions. Plugin system (`claude plugin add`) is the 2026 standard. npm adds PATH configuration burden, sudo issues, and requires users to understand npm. |
-| **Bash scripts / curl** | Cross-platform problem. Bash is not guaranteed on Windows (Git Bash or WSL only). `curl` behavior differs across platforms. `jq` is not installed by default on Windows. Node.js is guaranteed because Claude Code requires it. |
-| **Python scripts** | Python adds a runtime dependency check (which Python? Is it in PATH? venv?). Node.js is already guaranteed. |
-| **MCP servers** | MCP servers are for persistent tool connections (databases, APIs with complex state). Our use case is simple read-only REST calls. Skills invoking scripts are simpler and require no running server process. |
-| **OpenSkills / AgentSkills.io** | Cross-agent skill standard. Interesting but unnecessary complexity -- this project targets Claude Code only. Plugin system is sufficient. |
-| **Entra ID / OAuth authentication** | More secure than PATs but dramatically more complex to set up (app registration, tenant config, redirect URIs). PAT is the right choice for a CLI tool targeting individual developers. Revisit for v2 if enterprise customers need it. |
-| **OS credential store (keytar)** | Requires native binary compilation, varies by OS, complex to read from scripts. Plaintext config file in home dir matches how gh, az, and aws CLI tools work. Acceptable tradeoff for v1. |
+**Batch size limit:** 200 IDs per batch call (hard API limit). Must chunk arrays of IDs.
+Pattern: `for (let i=0; i<ids.length; i+=200) { batch(ids.slice(i,i+200)) }`.
 
-## Alternatives Considered
+**Important:** WIQL `$top` parameter caps at 20,000. For projects with >500 open bugs, this
+is sufficient. No pagination needed for the WIQL step; the batch step handles chunking.
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| Distribution | Claude Code Plugin (GitHub) | npm global package | Plugin system is native, no Node.js install step, built-in update/remove lifecycle |
-| API calls | Node.js `fetch()` (built-in) | curl via Bash | Cross-platform. Node.js is guaranteed on all Claude Code installs. Bash is not. |
-| API calls | Node.js `fetch()` (built-in) | azure-devops-node-api | Zero dependencies vs. 50+ transitive deps. We make simple GET/POST requests. |
-| Config storage | `~/.ado-insights/config.json` | Environment variables | Config file is one-time setup; env vars must be set per session. Support env var as override. |
-| Config storage | `~/.ado-insights/config.json` | OS keychain (keytar) | Keychain requires native binaries, varies by OS. Config file is simpler. |
-| API version | 7.1 GA | 7.2 Preview | GA stability over preview features. 7.1 covers all needed endpoints. |
-| Script language | Node.js (.mjs) | Bash | Node.js is cross-platform and guaranteed present. Bash breaks on Windows. |
-| Script language | Node.js (.mjs) | Python | Node.js is guaranteed by Claude Code. Python may not be installed or in PATH. |
-| Auth mechanism | PAT (Basic auth) | Entra ID / OAuth | PAT is simple self-service setup; OAuth requires Azure AD app registration |
-| Testing | Node.js built-in test runner | Jest / Vitest | Zero dependencies. Built-in `node --test` is sufficient for 5-10 test files. |
+**Confidence: HIGH** — Both endpoints verified at Microsoft Learn 7.1 docs.
 
-## Skill Anatomy (How Skills Work)
+---
 
-Each skill is a SKILL.md file with two parts:
+### /adi:sprint — Work/Iterations API
 
-### 1. YAML Frontmatter (metadata)
+**Why this approach:** Sprint data lives in the Work API (not the Work Item Tracking API).
+Getting sprint completion requires three steps: (1) discover the default team, (2) get current
+iteration for that team, (3) get work items assigned to that iteration, (4) enrich with state
+via the batch endpoint.
 
+**Step 1 — Get default team ID:**
+```
+GET https://dev.azure.com/{org}/_apis/projects/{project}?api-version=7.1
+    &includeCapabilities=false
+```
+
+Response includes `defaultTeam.id` (UUID) and `defaultTeam.name`.
+
+The `{team}` path parameter in the iterations API can be omitted if the default team matches
+what the user expects. However, using the explicit default team ID is more reliable across
+projects with custom team configurations.
+
+**Step 2 — Get current iteration:**
+```
+GET https://dev.azure.com/{org}/{project}/{team}/_apis/work/teamsettings/iterations
+    ?api-version=7.1
+    &$timeframe=current
+```
+
+`{team}` can be the team name (URL-encoded) or team ID. Use `defaultTeam.name` from Step 1.
+
+Response — `TeamSettingsIteration[]`:
+```json
+{
+  "values": [
+    {
+      "id": "a589a806-bf11-4d4f-a031-c19813331553",
+      "name": "Sprint 47",
+      "attributes": {
+        "startDate": "2026-02-17T00:00:00Z",
+        "finishDate": "2026-02-28T00:00:00Z",
+        "timeFrame": "current"
+      }
+    }
+  ]
+}
+```
+
+Note: `values` key (not `value`) is used in this response. This is an inconsistency in the
+ADO API — most list endpoints use `value`, but teamsettings uses `values`.
+
+**Step 3 — Get iteration work items (IDs only):**
+```
+GET https://dev.azure.com/{org}/{project}/{team}/_apis/work/teamsettings/iterations
+    /{iterationId}/workitems?api-version=7.1
+```
+
+Response `workItemRelations[]` contains `target.id` for each work item. Use these IDs with
+the batch endpoint (Step 4) to get state and story points.
+
+**Step 4 — Batch fetch sprint work items:**
+Same `workitemsbatch` endpoint as /adi:bugs, with fields:
+```json
+{
+  "ids": [...],
+  "fields": [
+    "System.Id",
+    "System.Title",
+    "System.WorkItemType",
+    "System.State",
+    "Microsoft.VSTS.Scheduling.StoryPoints",
+    "Microsoft.VSTS.Scheduling.RemainingWork",
+    "System.AssignedTo"
+  ],
+  "errorPolicy": "omit"
+}
+```
+
+**Velocity calculation:** Sprint velocity = sum of `StoryPoints` for completed items
+(`System.State` in `["Done", "Closed", "Resolved"]`). Fetch 3 prior iterations
+(`$timeframe` not set, take last 3 by `finishDate`) and average their completed story
+points to get baseline velocity.
+
+**Required PAT scope:** `Work Items (Read)` — same new scope as /adi:bugs.
+
+**Team discovery fallback:** If the project has no `defaultTeam` or if team name contains
+characters that break URL encoding, use the org-level teams list:
+```
+GET https://dev.azure.com/{org}/_apis/teams?api-version=7.1-preview.3
+    &$mine=true&$top=10
+```
+Note this endpoint is still in preview (7.1-preview.3) — use it only as fallback.
+
+**Confidence: HIGH** — All iteration endpoints verified at Microsoft Learn 7.1 docs.
+
+---
+
+### /adi:summary — Aggregation Pattern (No New Endpoints)
+
+**Why no new endpoints:** Summary calls the existing three data scripts and aggregates their
+JSON outputs. It does not make its own API calls. This is intentional — re-use, do not
+duplicate.
+
+**Implementation pattern:**
+The SKILL.md for /adi:summary runs three Node.js scripts sequentially and receives three JSON
+payloads. Claude then synthesizes a single narrative.
+
+```bash
+# In SKILL.md, run all three:
+node "$PLUGIN_ROOT/scripts/pr-metrics.mjs"
+node "$PLUGIN_ROOT/scripts/contributors.mjs"
+node "$PLUGIN_ROOT/scripts/bugs.mjs"
+node "$PLUGIN_ROOT/scripts/sprint.mjs"
+```
+
+Alternatively, a single `summary.mjs` orchestrator script can spawn child processes and merge
+outputs into one JSON object. The orchestrator approach reduces the number of Bash steps in
+the SKILL.md and gives a single JSON for Claude to narrate.
+
+**Recommended: orchestrator script (`summary.mjs`)** using `child_process.execFile` to run
+the other scripts and `JSON.parse` their stdout. This keeps SKILL.md simple (one Bash step)
+while providing a single structured object.
+
+```javascript
+// Pattern in summary.mjs
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+const exec = promisify(execFile);
+
+const [prResult, contribResult, bugsResult, sprintResult] = await Promise.all([
+  exec('node', ['pr-metrics.mjs']).then(r => JSON.parse(r.stdout)),
+  exec('node', ['contributors.mjs']).then(r => JSON.parse(r.stdout)),
+  exec('node', ['bugs.mjs']).then(r => JSON.parse(r.stdout)),
+  exec('node', ['sprint.mjs']).then(r => JSON.parse(r.stdout)),
+]);
+console.log(JSON.stringify({ prMetrics: prResult, contributors: contribResult,
+                              bugs: bugsResult, sprint: sprintResult }));
+```
+
+**`child_process` and `util` are both Node.js built-ins** — no npm dependencies.
+
+**Confidence: HIGH** — Node.js built-in modules; no external sources needed.
+
+---
+
+### /adi:update — Self-Update Mechanism
+
+**The gap:** Claude Code has no native "update installed plugin" automatic flow. Plugins are
+pinned to the commit SHA at install time. `claude plugin update` exists but requires manual
+invocation by the user outside Claude. The `/adi:update` skill bridges this.
+
+**Mechanism — git pull in the plugin install directory:**
+
+The plugin is installed as a Git-cloned directory. The simplest update is `git pull` inside
+that directory. The SKILL.md already resolves `PLUGIN_ROOT` via the installed_plugins.json
+lookup. The same pattern applies here.
+
+```bash
+# In SKILL.md for /adi:update:
+PLUGIN_ROOT=`node -e "..."` && git -C "$PLUGIN_ROOT" pull --ff-only
+```
+
+`git -C <dir>` sets the working directory, so no `cd` is needed. `--ff-only` prevents
+accidental merge commits if the user has local modifications.
+
+**Version display — CHANGELOG.md read:**
+After the pull, read `CHANGELOG.md` from the plugin root and surface the top section (most
+recent version notes) to the user. Node.js `fs.readFileSync` reads the file; Claude extracts
+and formats the newest changelog entry.
+
+**Version check (optional, no API needed):** Read `version` from
+`.claude-plugin/plugin.json` (local) and compare to the GitHub releases API:
+```
+GET https://api.github.com/repos/{owner}/{repo}/releases/latest
+```
+This endpoint is unauthenticated, returns JSON with `tag_name` and `body` (release notes).
+Rate limit: 60 requests/hour unauthenticated. Acceptable for an on-demand update check.
+
+**The SKILL.md flow:**
+1. Resolve `PLUGIN_ROOT` (existing pattern).
+2. Run `git -C "$PLUGIN_ROOT" fetch --dry-run` — check if updates are available.
+3. If up to date: tell user "Already on latest version."
+4. If updates available: run `git -C "$PLUGIN_ROOT" pull --ff-only`.
+5. Read `CHANGELOG.md` from `PLUGIN_ROOT` and display the most recent entry.
+6. Tell user to restart Claude Code for changes to take effect.
+
+**Required tools in SKILL.md frontmatter:**
 ```yaml
+allowed-tools: Bash(node *), Bash(git *)
+```
+
+Git is available on any system where Claude Code is installed (Claude Code itself requires Git
+for its own update mechanism).
+
+**What NOT to do:** Do not call `npm install` or run a build step. This project has zero
+dependencies by design. A `git pull` is sufficient because all scripts are plain .mjs files.
+
+**Confidence: MEDIUM** — The `git -C <dir> pull` mechanism is standard Git and works on all
+platforms. The `allowed-tools: Bash(git *)` allowlist pattern is inferred from the existing
+`Bash(node *)` pattern in pr-metrics/SKILL.md; this should be verified during implementation
+against the actual Claude Code tool allowlist syntax.
+
 ---
-name: pr-metrics
-description: Analyze pull request review times, reviewer distribution, and bottlenecks in your Azure DevOps project.
-disable-model-invocation: true
-allowed-tools: Bash(node *)
+
+## New PAT Scopes Required
+
+v1.0 required: `Project and Team (Read)`, `Code (Read)`
+
+v1.1 adds: `Work Items (Read)` — required for /adi:bugs and /adi:sprint.
+
+The /adi:setup skill must be updated to validate the new scope. The setup validation pattern
+(attempt a known API call and check for 403) should add:
+```
+GET {org}/{project}/_apis/wit/workItems/1?api-version=7.1
+```
+A 403 on this call means `Work Items (Read)` is missing.
+
 ---
+
+## New Functions Needed in ado-client.mjs
+
+The existing `adoGet` function is orphaned (implicit loadConfig, inconsistent with the 4
+dedicated functions). New functions should follow the dedicated-function pattern: explicit
+`config` parameter, no internal `loadConfig` call.
+
+| Function Name | Purpose | HTTP Method |
+|---------------|---------|-------------|
+| `adoGetCommits(config, repoId, params)` | Fetch commits for one repo | GET |
+| `adoWiql(config, query, top)` | Run WIQL query, return ID list | POST |
+| `adoGetWorkItemsBatch(config, ids, fields)` | Batch-fetch work items by ID array | POST |
+| `adoGetIterations(config, teamName, timeframe)` | Get team iterations | GET |
+| `adoGetIterationWorkItems(config, teamName, iterationId)` | Get work item IDs in sprint | GET |
+| `adoGetProject(config)` | Get project details including defaultTeam | GET |
+
+**POST requests in ado-client.mjs:** The existing functions are all GET. The WIQL and
+batch endpoints require POST with `Content-Type: application/json` and a JSON body.
+The `fetch` call changes to:
+```javascript
+response = await fetch(url.toString(), {
+  method: 'POST',
+  headers: {
+    'Authorization': buildAuthHeader(config.pat),
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(payload)
+});
+```
+This is the only new pattern vs. existing GET functions.
+
+---
+
+## Aggregation Patterns (Node.js)
+
+### Grouping by field value (contributors, bugs by severity)
+
+```javascript
+// Group commits by author email
+const byAuthor = commits.reduce((acc, commit) => {
+  const key = commit.author.email;
+  if (!acc[key]) acc[key] = { name: commit.author.name, commits: [] };
+  acc[key].commits.push(commit);
+  return acc;
+}, {});
 ```
 
-Key fields for this project:
-- `name`: Combined with plugin name to create `/ado-insights:pr-metrics` command
-- `description`: Tells Claude what this skill does (used for auto-load when enabled)
-- `disable-model-invocation: true`: User must explicitly run the command; Claude will not auto-trigger it
-- `allowed-tools: Bash(node *)`: Grants permission to run Node.js scripts without per-use approval
+This pattern is already used in pr-metrics.mjs for reviewer distribution. Apply the same
+pattern for commit authors and bug severity grouping.
 
-### 2. Markdown Body (instructions for Claude)
+### Chunking arrays for batch API limits
 
-The body is a prompt that tells Claude:
-1. Run the data-fetching script: `node <plugin-root>/scripts/pr-metrics.mjs`
-2. Read the structured JSON output
-3. Analyze the data following specific guidelines
-4. Write a narrative report with prescribed sections (findings, anomalies, recommendations)
-
-**Key architectural principle:** Scripts output structured data (JSON). Skills tell Claude how to narrate it. Claude writes the report. This separation means scripts are testable and deterministic, while narrative quality improves as Claude models improve.
-
-### Dynamic Context Injection
-
-Skills support `!`command`` syntax to run shell commands before the prompt reaches Claude:
-
-```markdown
-## Configuration
-- Organization: !`node -e "const c=JSON.parse(require('fs').readFileSync(require('os').homedir()+'/.ado-insights/config.json'));console.log(c.orgUrl)"`
+```javascript
+// Chunk IDs into batches of 200 (hard API limit)
+function chunk(arr, size) {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+const batches = chunk(workItemIds, 200);
+const results = await Promise.all(batches.map(ids => adoGetWorkItemsBatch(config, ids, fields)));
+const allItems = results.flatMap(r => r.value || []);
 ```
 
-This runs at invocation time, injecting actual config values into the prompt.
+### Two-window activity comparison (contributors)
 
-### String Substitutions
-
-- `$ARGUMENTS` -- all arguments passed after the command name
-- `$ARGUMENTS[0]`, `$0` -- first positional argument
-- `$ARGUMENTS[1]`, `$1` -- second positional argument
-
-Example: `/ado-insights:pr-metrics last-30-days` makes `$0` = `last-30-days`
-
-## Installation Instructions for End Users
-
-```bash
-# Install the plugin (one-time)
-claude plugin add github:your-org/ado-insights
-
-# Run setup to configure credentials
-/ado-insights:setup
-
-# Verify connection works
-/ado-insights:project-state
+```javascript
+// Fetch 90-day window, then identify who has no commits in recent 30 days
+const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString();
+const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+// activeInLast30 = authors with commit.author.date >= thirtyDaysAgo
+// quietSince30   = authors with commits in 90d window but none in 30d window
 ```
 
-No npm, no build step. Plugin system handles installation, updates, and removal.
+---
 
-## Development Setup
+## What NOT to Add
 
-```bash
-# Clone the repo
-git clone https://github.com/your-org/ado-insights.git
-cd ado-insights
+| Temptation | Why Not |
+|-----------|---------|
+| Azure DevOps Analytics OData | Cloud-only, different auth model, different query language. Explicitly out of scope (PROJECT.md). Deferred to v2. |
+| Work item history / revisions | Adds significant API call volume. Not needed for the stated goals of bug trends (created date is sufficient). |
+| Board columns / swimlane state | Board configuration varies per team/process. Stick to `System.State` which is universal. |
+| GraphQL / VSTS client library | Adds dependencies. All needed data is reachable via REST. |
+| Webhooks or polling | Out of scope; v1 is on-demand only (PROJECT.md). |
+| Writing back to ADO (resolving bugs, etc.) | Out of scope; v1 is read-only (PROJECT.md). |
+| `npm install` in /adi:update | Project is zero-dependency. `git pull` is sufficient. Never add a build step. |
 
-# Test locally without installing (loads plugin from current directory)
-claude --plugin-dir .
+---
 
-# Now /ado-insights:setup, /ado-insights:pr-metrics, etc. are available
+## Version Compatibility
 
-# Run script tests
-node --test scripts/*.test.mjs
+| API Endpoint | API Version | Status | Notes |
+|-------------|-------------|--------|-------|
+| `git/repositories/{id}/commits` | 7.1 | GA | Use for contributors |
+| `wit/wiql` | 7.1 | GA | Use for bug queries |
+| `wit/workitemsbatch` | 7.1 | GA | Use for work item batch fetch |
+| `work/teamsettings/iterations` | 7.1 | GA | Use for sprint data |
+| `work/teamsettings/iterations/{id}/workitems` | 7.1 | GA | Use for sprint item IDs |
+| `projects/{project}` | 7.1 | GA | Use for defaultTeam discovery |
+| `_apis/teams` | 7.1-preview.3 | Preview | Use only as fallback for team discovery |
 
-# Lint scripts
-npx eslint scripts/
-```
+All GA endpoints confirmed at Microsoft Learn api-version=7.1 as of 2026-02-25.
+The `_apis/teams` preview endpoint has been stable since v4.1 — low risk.
 
-## Zero-Dependency Principle
-
-This project has **zero npm dependencies**. No `package.json` with dependencies. No `node_modules`. No `npm install` step. Everything uses Node.js built-in APIs:
-
-| Need | Built-in Solution |
-|------|-------------------|
-| HTTP requests | `fetch()` (global, Node 18+) |
-| File I/O | `fs` module |
-| Path handling | `path` module |
-| Home directory | `os.homedir()` |
-| Base64 encoding | `Buffer.from().toString('base64')` |
-| JSON parsing | `JSON.parse()` (built-in) |
-| CLI argument parsing | `process.argv.slice(2)` |
-| Test runner | `node --test` (built-in, Node 18+) |
-
-This is intentional. A Claude Code plugin that requires `npm install` before use defeats the purpose of frictionless distribution.
+---
 
 ## Sources
 
-- [Claude Code Skills Documentation](https://code.claude.com/docs/en/skills) -- Skill format, frontmatter, distribution, `!`command`` syntax, allowed-tools (HIGH confidence)
-- [Claude Code Plugins Documentation](https://code.claude.com/docs/en/plugins) -- Plugin structure, manifest, `.claude-plugin/plugin.json` (HIGH confidence)
-- [Claude Code Discover Plugins](https://code.claude.com/docs/en/discover-plugins) -- Plugin marketplace, `claude plugin add github:` syntax (HIGH confidence)
-- [Azure DevOps REST API Reference (7.1)](https://learn.microsoft.com/en-us/rest/api/azure/devops/?view=azure-devops-rest-7.1) -- All API endpoints, auth patterns (HIGH confidence)
-- [Azure DevOps REST API Versioning](https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/rest-api-versioning?view=azure-devops) -- Version format, GA vs preview (HIGH confidence)
-- [Azure DevOps PAT Authentication](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops) -- PAT creation, scopes, security best practices (HIGH confidence)
-- [Azure DevOps Pull Requests API](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-requests?view=azure-devops-rest-7.1) -- PR endpoints (HIGH confidence)
-- [Azure DevOps Work Items API](https://learn.microsoft.com/en-us/azure/devops/integrate/quickstarts/work-item-quickstart?view=azure-devops) -- WIQL queries, work item batch fetch (HIGH confidence)
-- [agent-skill-npm-boilerplate](https://github.com/neovateai/agent-skill-npm-boilerplate) -- npm distribution pattern (considered, rejected) (MEDIUM confidence)
-- [Claude Code Plugin CLI Guide](https://medium.com/@garyjarrel/claude-code-plugin-cli-the-missing-manual-0a4d3a7c99ce) -- Plugin CLI commands, marketplace management (MEDIUM confidence)
+- [Git Commits API (7.1)](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/commits/get-commits?view=azure-devops-rest-7.1) — endpoint, params, GitCommitRef shape (HIGH confidence)
+- [WIQL Query By Wiql (7.1)](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/wiql/query-by-wiql?view=azure-devops-rest-7.1) — POST endpoint, request body, WorkItemQueryResult shape (HIGH confidence)
+- [Work Items Batch GET (7.1)](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-items-batch?view=azure-devops-rest-7.1) — POST endpoint, field list, 200-item limit (HIGH confidence)
+- [Work Iterations List (7.1)](https://learn.microsoft.com/en-us/rest/api/azure/devops/work/iterations/list?view=azure-devops-rest-7.1) — GET endpoint, `$timeframe=current`, TeamSettingsIteration shape (HIGH confidence)
+- [Work Iterations Get Work Items (7.1)](https://learn.microsoft.com/en-us/rest/api/azure/devops/work/iterations/get-iteration-work-items?view=azure-devops-rest-7.1) — GET endpoint, IterationWorkItems shape, `workItemRelations` array (HIGH confidence)
+- [Projects Get (7.1)](https://learn.microsoft.com/en-us/rest/api/azure/devops/core/projects/get?view=azure-devops-rest-7.1) — `defaultTeam` field in TeamProject (HIGH confidence)
+- [Teams Get All Teams (7.1-preview.3)](https://learn.microsoft.com/en-us/rest/api/azure/devops/core/teams/get-all-teams?view=azure-devops-rest-7.1) — fallback team discovery, WebApiTeam shape (HIGH confidence)
+- [Keeping Claude Code plugins up to date](https://workingbruno.com/notes/keeping-claude-code-plugins-date) — confirms no native auto-update for plugins; git pull approach is the practical mechanism (MEDIUM confidence)
+- [GitHub Releases API](https://docs.github.com/en/rest/releases/releases#get-the-latest-release) — `GET /repos/{owner}/{repo}/releases/latest` unauthenticated, 60 req/hour (HIGH confidence)
+- Existing `ado-client.mjs` and `pr-metrics.mjs` — established patterns for pagination, error types, config loading (HIGH confidence — source code)
+
+---
+*Stack research for: Azure DevOps Insights v1.1 new skills*
+*Researched: 2026-02-25*

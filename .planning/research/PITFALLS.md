@@ -1,279 +1,359 @@
-# Domain Pitfalls
+# Pitfalls Research
 
-**Domain:** Claude Code skill pack integrating with Azure DevOps REST API
+**Domain:** Adding new skills to an existing Azure DevOps Insights Claude Code plugin (v1.1)
 **Researched:** 2026-02-25
+**Confidence:** HIGH
+
+> **Scope note:** This file covers pitfalls specific to v1.1 additions — `/adi:contributors`,
+> `/adi:bugs`, `/adi:sprint`, `/adi:summary`, and `/adi:update`. Pitfalls already mitigated
+> in v1.0 (HTTP 203, adoGet orphan, CLAUDE_PLUGIN_ROOT resolver) are referenced but not
+> repeated in full.
+
+---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, security incidents, or fundamental architecture problems.
+### Pitfall 1: Sprint API Requires a Team Segment in the URL Path
 
-### Pitfall 1: PAT Token Stored in Plaintext Config File
+**What goes wrong:**
 
-**What goes wrong:** The PROJECT.md specifies storing credentials in `~/.ado-insights/config.json`. A plaintext JSON file containing a PAT is a security incident waiting to happen. Users will accidentally commit it, back it up to cloud storage, or leave it readable by other processes. Azure DevOps auto-revokes PATs found in public GitHub repos, so a leaked token causes immediate breakage.
+The sprint/iteration endpoints live under `teamsettings`, not the project-level `_apis` root:
 
-**Why it happens:** Convenience over security. A JSON config file is the simplest implementation, and the project spec calls for "one-time setup is friendlier for casual users."
+```
+GET {org}/{project}/{team}/_apis/work/teamsettings/iterations?$timeframe=current
+```
 
-**Consequences:** Token exposure leads to unauthorized read access to all Azure DevOps data the PAT can reach. If the user created a full-scope PAT (common among developers who don't read scope docs carefully), this means complete org access.
+Omitting `{team}` causes a 404 or returns data for the wrong default team. A developer who models this endpoint after the existing PR endpoints (which use `{project}/_apis/git/...`) will write the wrong URL and get confusing errors.
 
-**Prevention:**
-- Use the OS credential store via `keytar` or equivalent (macOS Keychain, Windows Credential Manager, libsecret on Linux)
-- If a config file is necessary for org URL and project name, store ONLY non-secret configuration there. Keep the PAT in the credential store or read from an environment variable (`ADO_PAT`)
-- Support multiple auth methods: environment variable > credential store > config file (last resort, with a warning)
-- Add a `.gitignore`-style warning if the config file contains a token field
-- Document minimum required PAT scopes explicitly: `Code (Read)`, `Work Items (Read)`, `Build (Read)`, `Graph (Read)`
+The two-step pattern required is:
 
-**Detection:** Review auth implementation early. If `config.json` has a `pat` or `token` field stored as plain text, this pitfall is active.
+1. `GET {org}/{project}/_apis/teams` — list teams, pick one (or use project name as default team slug)
+2. `GET {org}/{project}/{team}/_apis/work/teamsettings/iterations?$timeframe=current` — get current sprint
+3. `GET {org}/{project}/{team}/_apis/work/teamsettings/iterations/{iterationId}/workitems` — get work item references
+4. `POST {org}/{project}/_apis/wit/workitemsbatch` — fetch actual work item details by ID batch
 
-**Phase:** Must be addressed in Phase 1 (setup/configuration). Retrofitting auth storage is painful once users have existing configs.
+**Why it happens:**
 
-**Confidence:** HIGH -- based on [Microsoft official PAT security guidance](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops) and [GitGuardian remediation docs](https://www.gitguardian.com/remediation/azure-devops-personal-access-token).
+v1.0 skills only use `git/repositories/...` and `git/pullrequests/...` endpoints, which are project-scoped. The team-scoped `work/teamsettings/...` namespace is structurally different and not established in the existing `ado-client.mjs` helper library.
 
----
+**How to avoid:**
 
-### Pitfall 2: Distribution Model Mismatch -- npm Global Install vs Claude Code Plugin System
+- Add a dedicated `adoGetTeamIterations(config, team, timeframe)` function to `ado-client.mjs` before writing `sprint.mjs`
+- Default team slug: Azure DevOps accepts the project name as the team slug when the project has only one team (the default team). Document this fallback clearly.
+- Add a `--team` flag to `sprint.mjs` so users can specify a non-default team
+- If no team is configured and the API returns 404, surface: "No team found. Try `--team=<name>`. List teams with `/adi:help`."
 
-**What goes wrong:** The PROJECT.md says "installable via a single global command (e.g., `npm install -g ado-insights`)." But Claude Code skills are markdown files that live in `~/.claude/skills/` or `.claude/skills/`, not executable binaries. An npm global install would put files in npm's global `node_modules`, which Claude Code does not scan. The npm package would need a postinstall script to copy files into `~/.claude/skills/`, which is fragile and breaks on updates.
+**Warning signs:**
 
-Meanwhile, Claude Code now has a dedicated **plugin system** with `.claude-plugin/plugin.json` manifests, plugin marketplaces, and the `/plugin` command for installation. This is the intended distribution mechanism.
+- `sprint.mjs` constructs URLs that look like `{org}/{project}/_apis/work/teamsettings/...` (missing the team segment)
+- Test against a project with multiple teams — the default team assumption breaks immediately
 
-**Why it happens:** The project was conceived before fully researching Claude Code's plugin ecosystem. npm is the default mental model for distributing Node.js tools.
-
-**Consequences:** If you build around npm global install, you fight against Claude Code's architecture. Users get a confusing install experience (run npm install, then manually copy files, or rely on a brittle postinstall script). Updates break. Uninstall leaves orphan files.
-
-**Prevention:**
-- Distribute as a **Claude Code plugin** using the plugin system with a `.claude-plugin/plugin.json` manifest
-- Host the plugin in a GitHub repo as a plugin marketplace so users install via `/plugin marketplace add <org>/<repo>` then `/plugin install ado-insights`
-- Keep an npm package as an optional secondary distribution method with a CLI setup script, but make the plugin the primary path
-- The plugin structure naturally namespaces skills as `/ado-insights:pr-metrics`, preventing conflicts
-
-**Detection:** If the implementation plan starts with "create an npm package with a bin entry," this pitfall is active. The correct starting point is "create a Claude Code plugin directory structure."
-
-**Phase:** Must be decided in Phase 1. The entire project structure depends on the distribution model.
-
-**Confidence:** HIGH -- based on [Claude Code plugins documentation](https://code.claude.com/docs/en/plugins) and [skills documentation](https://code.claude.com/docs/en/skills).
+**Phase to address:** Phase building `/adi:sprint` (before writing the script)
 
 ---
 
-### Pitfall 3: Azure DevOps Pagination is Inconsistent Across Endpoints
+### Pitfall 2: Iteration Work Items Returns References Only — Full Details Require a Second Batch Call
 
-**What goes wrong:** You build a generic "fetch all results" helper, then discover that Azure DevOps uses at least three different pagination mechanisms depending on the endpoint:
-1. **Continuation tokens** via `x-ms-continuationtoken` response header (Git commits, pipelines, test plans)
-2. **`$top` and `$skip`** query parameters (work items, some list endpoints)
-3. **WIQL queries** that return only work item IDs (max 20,000), requiring separate batch fetches for actual work item data
+**What goes wrong:**
 
-You implement one pattern, then hit a different endpoint that uses another. Or worse, you hit the hard 20,000 WIQL result cap and get error `VS402337` with no workaround except changing the query.
+`GET .../iterations/{iterationId}/workitems` returns `workItemRelations[]` with only IDs and URLs — no titles, states, story points, or types:
 
-**Why it happens:** Azure DevOps API evolved over many years across different teams. There is no single pagination standard.
+```json
+{
+  "workItemRelations": [
+    { "target": { "id": 42, "url": "..." } }
+  ]
+}
+```
 
-**Consequences:** Data truncation without warning (the API silently returns partial results on some endpoints). Skills report inaccurate metrics because they only processed the first page. On large orgs, WIQL queries fail entirely.
+A developer who expects rich work item data from this endpoint will output only IDs to Claude. Claude cannot produce a sprint narrative from IDs alone.
 
-**Prevention:**
-- Build endpoint-specific data fetchers, not a generic "paginate everything" utility
-- For each endpoint used by a skill, document which pagination mechanism it uses
-- For WIQL: always add date filters (e.g., last 90 days) to keep results under 20,000. Never issue an unbounded WIQL query
-- For continuation tokens: URL-encode the token exactly as received. Do not trim, quote-wrap, or modify it
-- Add a `maxResults` safety cap (e.g., 5,000) with a warning when hit, so skills don't silently loop forever on large datasets
-- Test against a project with 1,000+ work items and 500+ PRs during development
+The full data requires a second call: `POST {org}/{project}/_apis/wit/workitemsbatch` with the extracted IDs, specifying `fields` to include `System.State`, `System.Title`, `Microsoft.VSTS.Scheduling.StoryPoints`, `System.WorkItemType`, etc.
 
-**Detection:** If the codebase has a single `fetchAllPages()` function used across all endpoints, this pitfall is active.
+**Why it happens:**
 
-**Phase:** Phase 2 (first skill implementation). This will surface immediately when building the PR metrics or bug report skill.
+The pattern is the classic N+1 problem disguised as an ADO API design — the relations endpoint is intentionally lightweight. The batch endpoint exists to solve this, but it requires a POST with a body, which is different from every other call in the v1.0 codebase (all are GETs).
 
-**Confidence:** HIGH -- based on [Microsoft pagination docs](https://learn.microsoft.com/en-us/answers/questions/1051518/pagination-in-rest-api), [continuation token issues](https://learn.microsoft.com/en-us/answers/questions/5603409/azure-pipeline-api-is-not-accepting-the-continuati), and [20K WIQL limit](https://learn.microsoft.com/en-us/azure/devops/organizations/settings/work/object-limits?view=azure-devops).
+**How to avoid:**
 
----
+- Extract IDs from `workItemRelations[].target.id` (skip null targets from hierarchy links)
+- Batch into groups of 200 (the batch endpoint maximum)
+- POST to `_apis/wit/workitemsbatch?api-version=7.1` with `{ "ids": [...], "fields": [...] }`
+- The existing `ado-client.mjs` pattern only supports GET requests — add `adoPost(path, body, config)` or a dedicated `adoGetWorkItemsBatch(config, ids, fields)` function
 
-### Pitfall 4: Skill Output Floods Claude's Context Window
+**Warning signs:**
 
-**What goes wrong:** A skill fetches 500 PRs, 2,000 work items, or months of contributor data, then dumps it all into the conversation as raw JSON for Claude to narrate. This consumes most of Claude's 200K context window, degrades response quality, and can cause the context to compact mid-analysis, losing data.
+- `sprint.mjs` passes `workItemRelations` array directly to output without a second fetch
+- Output JSON contains only `id` and `url` fields, no `System.State` or `System.Title`
 
-**Why it happens:** The natural implementation is: fetch data, give it to Claude, ask Claude to analyze. This works for small datasets but breaks at scale.
-
-**Consequences:** Claude produces shallow or hallucinated analysis because it cannot process the full dataset. Context compaction drops important data. Users on metered API plans burn tokens on raw JSON that should have been pre-processed.
-
-**Prevention:**
-- Pre-aggregate data in the skill's fetch logic BEFORE passing to Claude. Claude should receive summary statistics and notable outliers, not raw records
-- For PR metrics: compute median review time, p95, reviewer distribution, and bottleneck PRs in code. Pass the computed summary (maybe 50-100 lines) to Claude for narrative generation
-- For contributors: compute commit counts, review counts, active days. Pass the leaderboard, not raw commit logs
-- Set a hard cap on data passed to Claude (aim for under 2,000 lines of structured summary)
-- Use the `context: fork` frontmatter option to run analysis in a subagent, keeping the main conversation clean
-
-**Detection:** If a skill's implementation does `fetch -> JSON.stringify -> pass to Claude`, this pitfall is active.
-
-**Phase:** Phase 2 (first skill implementation). Must be a design principle from the start, not a retrofit.
-
-**Confidence:** HIGH -- based on [Claude Code context window best practices](https://code.claude.com/docs/en/best-practices) and [context window documentation](https://platform.claude.com/docs/en/build-with-claude/context-windows).
+**Phase to address:** Phase building `/adi:sprint`
 
 ---
 
-## Moderate Pitfalls
+### Pitfall 3: Contributors API Is Per-Repository — Multi-Repo Aggregation Requires Looping
 
-### Pitfall 5: Hardcoding api-version or Omitting It Entirely
+**What goes wrong:**
 
-**What goes wrong:** Azure DevOps requires an `api-version` query parameter on every request. If omitted, behavior is undefined and may change without notice. If hardcoded to a specific version (e.g., `7.1`), the tool silently breaks when Microsoft deprecates that version (preview versions are deprecated 12 weeks after GA release).
+There is no project-wide "contributor summary" endpoint. The commits API is scoped to a single repository:
 
-**Prevention:**
-- Define `api-version` as a constant at the top of the codebase, not scattered across URL strings
-- Use a released (non-preview) version: `7.2` is current as of early 2026
-- Document which API version the tool targets in the README and config
-- Add a startup check that validates the API version is still supported (a single lightweight API call)
-- Monitor the [Azure DevOps REST API versioning docs](https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/rest-api-versioning?view=azure-devops) for deprecation notices
+```
+GET {org}/{project}/_apis/git/repositories/{repoId}/commits?searchCriteria.fromDate=...
+```
 
-**Phase:** Phase 1 (API client setup).
+A developer who expects a single call to return all contributors across all repos in the project will get only one repo's worth of data. Projects with 5–20 repositories will silently under-count contributors.
 
-**Confidence:** HIGH -- based on [official versioning documentation](https://learn.microsoft.com/en-us/rest/api/azure/devops/?view=azure-devops-rest-7.2).
+**Why it happens:**
 
----
+The PR metrics skill used both `adoGetPrsByProject` (project-wide) and `adoGetPrsByRepo` (per-repo). The PR API supports project-wide queries because PRs have a project-scoped endpoint. The commits API does not — it requires a repo ID in the path.
 
-### Pitfall 6: PAT Base64 Encoding Done Wrong
+**How to avoid:**
 
-**What goes wrong:** Azure DevOps Basic auth requires the PAT to be formatted as `:<PAT>` (colon prefix, empty username), then base64-encoded, then sent as `Authorization: Basic <encoded>`. Developers commonly forget the leading colon, double-encode the token, or read the PAT from an environment variable that adds trailing whitespace/newline.
+- `contributors.mjs` must: (1) fetch all repos via `adoGetRepos(config)`, (2) loop each repo and fetch commits with date filter, (3) aggregate by author email/name across repos
+- Use `searchCriteria.fromDate` with a 30-day window by default to limit data volume
+- Deduplicate contributors by email, not display name (display names change; email is stable)
+- Respect rate limits: with 10 repos and 30 days of commits, this can be 10+ API calls. Use the existing batched approach from `pr-metrics.mjs`
 
-**Prevention:**
-- Centralize auth header construction in a single function
-- The format is exactly: `Buffer.from(':' + pat).toString('base64')`
-- Trim the PAT value before encoding to strip whitespace/newlines from env vars or config files
-- Test with a real PAT during development -- this error manifests as HTTP 203 (redirect to login page) or 401, not a clear error message
-- Add a `validateConnection()` function in the setup flow that tests the PAT against a lightweight endpoint (e.g., `GET _apis/projects?api-version=7.2&$top=1`)
+**Warning signs:**
 
-**Phase:** Phase 1 (API client setup).
+- `contributors.mjs` calls only one repo (hard-coded or only the first repo)
+- Contributor counts don't match what developers see in the ADO UI (UI aggregates cross-repo)
 
-**Confidence:** HIGH -- based on [PAT auth issues on Developer Community](https://developercommunity.visualstudio.com/content/problem/446754/pat-auth-docs-for-azure-devops-dont-mention-the-se.html) and [Microsoft docs](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops).
+**Phase to address:** Phase building `/adi:contributors`
 
 ---
 
-### Pitfall 7: Rate Limiting Without Backoff Causes Cascading Failures
+### Pitfall 4: summary Skill Calling Other Scripts via Bash Doubles the API Call Count
 
-**What goes wrong:** Azure DevOps rate limits are expressed in TSTUs (Throughput Units) -- 200 TSTUs per 5-minute sliding window. The API does NOT return HTTP 429 immediately; instead, it progressively delays responses (up to 30 seconds per request). If your code uses Promise.all to fire 50 parallel requests, you burn through TSTUs instantly and all subsequent requests crawl. On large orgs, a single skill invocation can throttle the user's entire Azure DevOps experience for minutes.
+**What goes wrong:**
 
-**Prevention:**
-- Limit concurrency to 3-5 parallel requests maximum
-- Implement exponential backoff when `Retry-After` header is present
-- Monitor `X-RateLimit-Remaining` header and slow down proactively when remaining drops below 20%
-- Add a configurable delay between batched requests (default 100ms)
-- Never fire unbounded `Promise.all` against the API
-- Warn users in the output if rate limiting was encountered
+The natural implementation of `/adi:summary` is for the SKILL.md to instruct Claude to run each of the four sibling scripts in sequence:
 
-**Phase:** Phase 1 (API client setup). Build the throttled HTTP client before building any skills.
+```bash
+node "$PLUGIN_ROOT/scripts/pr-metrics.mjs"
+node "$PLUGIN_ROOT/scripts/contributors.mjs"
+node "$PLUGIN_ROOT/scripts/bugs.mjs"
+node "$PLUGIN_ROOT/scripts/sprint.mjs"
+```
 
-**Confidence:** HIGH -- based on [official rate limits documentation](https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/rate-limits?view=azure-devops).
+This pattern works but creates a compounding rate-limit problem. Each script makes its own independent API calls. Running all four in a `/adi:summary` session makes approximately 4x the Azure DevOps API calls as a single skill. On teams with active ADO usage, this is likely to hit TSTU limits (200 TSTUs per 5-minute window) and cause the later scripts to slow down or time out.
 
----
+Additionally, Claude's context grows by the JSON output of all four scripts. At 2–4KB each, this is manageable, but must be verified against large projects (many repos, large sprints).
 
-### Pitfall 8: Skills Cannot Execute Node.js Directly -- They Are Markdown Instructions
+**Why it happens:**
 
-**What goes wrong:** A developer builds the skill pack as a traditional Node.js application with TypeScript modules, API client classes, and data processing pipelines. Then they discover that Claude Code skills are markdown files containing instructions for Claude. The skill does not "run" code -- it instructs Claude to use its available tools (Bash, Read, Grep, WebFetch) to accomplish tasks.
+Code reuse instinct: "just call the scripts we already wrote." This is correct for simplicity but ignores the additive API cost.
 
-This means the skill must instruct Claude to execute shell commands (e.g., `curl` or a bundled script) to call the Azure DevOps API. The data processing logic must either live in a script that Claude invokes or be described in natural language for Claude to implement on the fly.
+**How to avoid:**
 
-**Why it happens:** The mental model of "npm package with executable skills" is wrong. Skills are prompts, not programs.
+- Document the expected API call count per script in each script's header comment
+- In the summary SKILL.md, run the four scripts sequentially (not in parallel), with progress updates between each: "Fetching PR data... Fetching contributor data..." — this also helps users see progress on what can be a 15–30 second operation
+- Add a `--summary` flag to each script that reduces the output size (e.g., top-3 contributors only, no full stale PR list) so the JSON passed to Claude is smaller when called from summary context
+- Do not run all scripts with `Promise.all` or via background processes — sequential is safer under rate limits
 
-**Prevention:**
-- Architecture must be: skill markdown instructs Claude to run a bundled helper script (e.g., Python or Node.js) that does the actual API fetching and data aggregation
-- The helper script outputs a structured summary to stdout
-- The skill markdown tells Claude to run the script, read the output, and generate a narrative
-- Alternatively, the skill can instruct Claude to use `curl` or `fetch` via Bash tool directly, but this is fragile for complex multi-step API workflows
-- Use `allowed-tools: Bash(node *), Bash(python *), Read` in frontmatter to grant necessary permissions
+**Warning signs:**
 
-**Detection:** If the project plan describes "TypeScript skill modules that Claude imports," this pitfall is active.
+- Summary SKILL.md launches all four scripts simultaneously in a single bash invocation
+- No progress messaging between script runs — user sees nothing for 20+ seconds
 
-**Phase:** Phase 1 (architecture). This is a foundational understanding that shapes the entire project.
-
-**Confidence:** HIGH -- based on [Claude Code skills documentation](https://code.claude.com/docs/en/skills).
+**Phase to address:** Phase building `/adi:summary`
 
 ---
 
-### Pitfall 9: Azure DevOps On-Premises (Server) vs Cloud (Services) URL Differences
+### Pitfall 5: /adi:update Overwrites Plugin Files — Must Not Touch ~/.adi/config.json
 
-**What goes wrong:** The tool assumes all users are on Azure DevOps Services (cloud) with URLs like `https://dev.azure.com/{org}`. But many enterprises run Azure DevOps Server (on-premises) with URLs like `https://tfs.company.com/tfs/{collection}`. The URL structure, available API versions, and feature set differ between the two.
+**What goes wrong:**
 
-**Prevention:**
-- Accept a full base URL in configuration, not just an org name
-- Do not construct URLs with hardcoded `dev.azure.com` prefix
-- Document that v1 targets Azure DevOps Services (cloud) and list any known incompatibilities with Server
-- Use API version `7.1` or lower if supporting Server 2022, since Server versions lag behind Services
-- Test URL construction with both formats
+The self-update mechanism for `/adi:update` will likely use `git pull` (or equivalent) in the plugin install directory to fetch new skill files, scripts, and manifests. If the update logic is not scoped precisely to the plugin directory, it can:
 
-**Phase:** Phase 1 (configuration/setup). The URL handling must be flexible from the start.
+1. Accidentally attempt to overwrite `~/.adi/config.json` if the update logic confuses the plugin install path with the config path
+2. Leave old cached plugin versions in `~/.claude/plugins/cache/...` pointing to outdated scripts (confirmed GitHub issue #15642 in the Claude Code repo)
+3. Fail silently if the plugin was installed from a marketplace zip (no git remote to pull from) versus a git clone
 
-**Confidence:** MEDIUM -- based on [Azure DevOps REST API getting started docs](https://learn.microsoft.com/en-us/azure/devops/integrate/how-to/call-rest-api?view=azure-devops).
+**Why it happens:**
 
----
+The plugin install path (`installPath` in `installed_plugins.json`) is separate from `~/.adi/config.json`. But if the update script uses a relative path, cwd assumptions, or an imprecise glob, it can reach outside the plugin directory. Also: the existing `installed_plugins.json` resolver already shows that path resolution is fragile (hence the complex resolver one-liner in every SKILL.md).
 
-## Minor Pitfalls
+**How to avoid:**
 
-### Pitfall 10: WIQL Date Field Formats Are Non-Standard
+- `update.mjs` must resolve and validate the plugin root using the same `installed_plugins.json` resolver pattern already established
+- Before any file write, assert that the resolved path contains a recognizable plugin marker (`plugin.json` or `marketplace.json`) — abort if not found
+- `~/.adi/config.json` is not in the plugin directory and must never be in scope for update operations
+- The update mechanism should prefer `git fetch + git reset --hard origin/main` over `git pull` (avoids merge conflicts if user modified files)
+- After update, display the diff of `CHANGELOG.md` between old and new versions as the changelog
+- Warn the user: "You must restart Claude Code for updated skills to take effect" (the CLAUDE_PLUGIN_ROOT stale cache issue means running scripts may still point to old versions in the same session)
 
-**What goes wrong:** WIQL (Work Item Query Language) date comparisons require dates in a specific format and timezone handling. Using ISO 8601 strings or local timezone dates produces unexpected results or query failures. The `Changed Date` field for completed items older than 1 year causes them to disappear from backlog queries.
+**Warning signs:**
 
-**Prevention:**
-- Use `@today - 90` WIQL syntax for relative date ranges instead of absolute dates
-- Always include explicit date bounds in WIQL queries to avoid hitting the 20K limit
-- For the "bug report" skill, filter to last 90 days by default with a configurable range
+- `update.mjs` uses `process.cwd()` instead of the resolved plugin root
+- No validation that the target directory is the plugin before writing
+- No post-update message telling the user to restart Claude Code
 
-**Phase:** Phase 2-3 (skill implementation).
-
-**Confidence:** MEDIUM -- based on [WIQL reference syntax](https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax?view=azure-devops).
-
----
-
-### Pitfall 11: Skill Description Budget Overflow
-
-**What goes wrong:** Claude Code loads all skill descriptions into context so Claude knows what is available. The budget is 2% of the context window (~4,000 characters at 200K tokens), with a fallback of 16,000 characters. If you create many skills with verbose descriptions, some get silently excluded from Claude's awareness.
-
-**Prevention:**
-- Keep each skill description under 100 characters
-- Use `disable-model-invocation: true` for skills that should only be manually invoked (setup, config) to exclude them from the description budget
-- Run `/context` during testing to check for excluded skill warnings
-- Set `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var if needed
-
-**Phase:** Phase 3+ (when skill count grows).
-
-**Confidence:** HIGH -- based on [Claude Code skills documentation](https://code.claude.com/docs/en/skills) troubleshooting section.
+**Phase to address:** Phase building `/adi:update`
 
 ---
 
-### Pitfall 12: Cross-Platform Path and Shell Assumptions
+### Pitfall 6: WIQL Bug Query Without Date Filter Hits the 20,000 Work Item Hard Cap
 
-**What goes wrong:** If skills instruct Claude to run scripts via Bash, those scripts must work on Windows (Git Bash/WSL), macOS, and Linux. Path separators, `curl` availability, `node`/`python` command names (`python3` vs `python`), and line endings all vary.
+**What goes wrong:**
 
-**Prevention:**
-- Use Node.js scripts (not shell scripts) for cross-platform compatibility since Node is guaranteed to be available (Claude Code requires it)
-- Use `path.join()` and `os.homedir()` instead of hardcoded paths
-- Test on Windows specifically -- it is the most likely to break
+A WIQL query for bugs without a date filter will attempt to return all bugs ever created in the project. Projects with more than 20,000 work items total will fail with `VS402337`. This error is not a soft limit — you cannot paginate past it. The entire query fails.
 
-**Phase:** Phase 2 (first script implementation).
+Even projects under 20,000 total items can have thousands of bugs accumulated over years. An unbounded bug query will return stale data from 3+ years ago, which pollutes the "oldest unresolved bug" metric and makes the report feel wrong to the user.
 
-**Confidence:** MEDIUM -- general cross-platform development knowledge.
+**Why it happens:**
+
+"Show me all open bugs" sounds like a reasonable query, and the WIQL syntax makes it easy to write. The cap is a project-wide constraint that only surfaces on mature or large projects — it passes in testing on small projects.
+
+**How to avoid:**
+
+- Default WIQL filter: `AND [System.CreatedDate] >= @today - 180` — bugs created in the last 6 months
+- For "oldest unresolved" metric: make a separate query ordering by `[System.CreatedDate] ASC` with `$top=5`
+- Add `--days` flag to `bugs.mjs` (mirrors `pr-metrics.mjs` convention) so users can expand the window
+- Cap total results at 500 items via WIQL `$top=500` — more than enough for actionable reporting
+
+**Warning signs:**
+
+- `bugs.mjs` runs a WIQL query with no date condition
+- WIQL query has no `$top` limit
+
+**Phase to address:** Phase building `/adi:bugs`
 
 ---
 
-## Phase-Specific Warnings
+## Technical Debt Patterns
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|---|---|---|
-| Setup / Configuration | PAT stored in plaintext (Pitfall 1) | Implement credential store or env var auth from day one |
-| Setup / Configuration | Distribution as npm global (Pitfall 2) | Use Claude Code plugin system as primary distribution |
-| Setup / Configuration | Base64 encoding wrong (Pitfall 6) | Centralize auth header, add connection validation |
-| API Client Foundation | Rate limiting without backoff (Pitfall 7) | Build throttled HTTP client with concurrency limits |
-| API Client Foundation | Hardcoded api-version (Pitfall 5) | Define version constant, use 7.2 (released) |
-| First Skill (PR Metrics) | Inconsistent pagination (Pitfall 3) | Build endpoint-specific fetchers, not generic paginator |
-| First Skill (PR Metrics) | Context window overflow (Pitfall 4) | Pre-aggregate data before passing to Claude |
-| Skill Architecture | Skills are markdown, not code (Pitfall 8) | Bundle helper scripts that skills invoke via Bash tool |
-| Multiple Skills | Skill description budget (Pitfall 11) | Keep descriptions concise, use disable-model-invocation |
-| All Phases | On-premises URL differences (Pitfall 9) | Accept full base URL, don't hardcode dev.azure.com |
-| All Phases | Cross-platform compatibility (Pitfall 12) | Use Node.js scripts, test on Windows |
+Shortcuts that seem reasonable but create long-term problems.
+
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Copy-paste the PLUGIN_ROOT resolver one-liner into each new SKILL.md | Gets new skills working quickly | 5+ SKILL.md files all contain the same fragile 200-character one-liner; any fix must be applied in 5 places | Acceptable for v1.1 since the resolver works; add extraction note to backlog |
+| Using `adoGet` (the v1.0 orphaned export) instead of the dedicated functions | Fewer lines to write | `adoGet` uses implicit `loadConfig()` — breaks if called with a config override; causes subtle bugs in summary skill which may want to pass a modified config | Never acceptable — only use the dedicated functions |
+| Hardcoding `"Bug"` as the work item type in bugs.mjs | Works for most teams | Teams using custom work item types ("Defect", "Issue") get zero results with no explanation | Acceptable for v1.1 with a user-visible note; add `--type` flag in v1.2 |
+| Skipping `--summary` mode flag and always outputting full data | Less code per script | Summary skill receives 4x full JSON payloads; context grows; rate limit exposure increases | Not acceptable — add summary flag before shipping `/adi:summary` |
+| Using `searchCriteria.author` string match for contributor filtering | Simple to implement | String match is partial/fuzzy; "John" matches "John Smith" and "John Doe"; use email identity for deduplication instead | Never acceptable for contributor aggregation |
+
+---
+
+## Integration Gotchas
+
+Common mistakes when connecting to external services or sibling scripts.
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| ADO Iterations API | Calling `teamsettings/iterations` without team segment | Include `{team}` in path; default to project name as team slug |
+| ADO Work Items Batch | Calling GET with IDs in query string | Use POST to `_apis/wit/workitemsbatch` with body `{ ids: [...], fields: [...] }` |
+| ADO Commits API | Expecting cross-repo results from a single call | Loop all repos from `adoGetRepos()`, aggregate by author email |
+| ADO WIQL | No date filter on work item queries | Always include `@today - N` filter; use `$top` cap |
+| Summary → sibling scripts | Parallel Bash execution of all four scripts | Sequential execution with progress messages; each script is an independent API session |
+| Update → plugin files | Using `process.cwd()` or relative paths in update.mjs | Resolve plugin root from `installed_plugins.json`; validate with plugin marker file check |
+| Update → config.json | Broad file writes during update | Scope writes explicitly to plugin directory; assert path before every write |
+| Post-update session | Expecting updated scripts to be active immediately | Warn user to restart Claude Code; CLAUDE_PLUGIN_ROOT may point to stale cache until session restart |
+
+---
+
+## Performance Traps
+
+Patterns that work at small scale but fail as usage grows.
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Looping repos for contributor commits without rate-limit pacing | Scripts timeout after 30–60 seconds on projects with 10+ repos | Batch repo loops with sleep between groups; use existing `fetchAllThreads` pattern from pr-metrics.mjs | Projects with 5+ repos and 30-day window |
+| Fetching full commit objects to count contributors | Slow response; large JSON in context | Only request commit count fields; use `$top` to cap per-repo; aggregate counts, not raw commits | Projects with >500 commits in window |
+| Summary skill concatenating raw JSON from 4 scripts | Context window grows to 20KB+; Claude narration quality degrades | Each script outputs a compact summary-mode payload when called from summary context | Projects with 10+ repos, 200+ work items |
+| Work item batch calls with IDs from a large sprint | Batches of 200 return slowly; sprint script times out | Sprint script should cap sprint work items at 100 for reporting; flag if sprint is larger | Sprints with >100 items |
+
+---
+
+## Security Mistakes
+
+Domain-specific security issues beyond general web security.
+
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| update.mjs writing to paths derived from user-supplied input | Path traversal if a malicious `installed_plugins.json` exists | Resolve path from known system file; validate result contains plugin marker before write |
+| Displaying full PAT in error messages during update | PAT leaks into Claude conversation context | Always use `maskPat()` from `config.mjs` when displaying any credential-related value |
+| update.mjs fetching the changelog from a user-controlled URL | Open redirect / SSRF if org URL is malicious | Changelog is read from the local plugin directory after update, not fetched remotely |
+| Logging config values to stderr during script execution | PAT appears in stderr which may be captured in logs | Scripts must never write config fields to stderr; only write progress messages like "Fetching sprint data..." |
+
+---
+
+## UX Pitfalls
+
+Common user experience mistakes specific to this skill pack.
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| summary skill showing "Loading..." then silent for 30 seconds | User thinks Claude crashed or hung | Show per-script progress: "Fetching PR data (1/4)... Fetching contributor data (2/4)..." |
+| bugs.mjs returning "no bugs found" when the team uses "Defect" type | User assumes the skill is broken | Output "Queried work item type: Bug. If your team uses a different type, use `--type=Defect`." |
+| sprint.mjs returning empty when no team is configured | Cryptic 404 error or empty sprint | Output: "No sprint found for default team. If your project uses custom teams, run with `--team=<name>`." |
+| update skill showing git hash as "changelog" | Users can't interpret a SHA as meaningful output | Read and display the diff of CHANGELOG.md sections between old and new version |
+| contributors.mjs counting merge commit authors as contributors | Bot/automation accounts appear in contributor list | Filter out commits where `author.name` contains "[bot]", "Build", or matches the org's automation patterns — or add a `--exclude` flag |
+
+---
+
+## "Looks Done But Isn't" Checklist
+
+Things that appear complete but are missing critical pieces.
+
+- [ ] **sprint.mjs:** Sprint work item references fetched but work item details (state, title, story points) not fetched via batch — verify `System.State` and `System.Title` appear in output JSON
+- [ ] **sprint.mjs:** `$timeframe=current` returns empty array when the team has no active sprint configured — verify graceful "No active sprint" message, not a crash
+- [ ] **contributors.mjs:** Single-repo projects work; test with a multi-repo project to verify loop and deduplication produce correct counts
+- [ ] **contributors.mjs:** Author deduplication uses email, not display name — verify by checking for two contributors with similar names
+- [ ] **bugs.mjs:** Default work item type filter is "Bug" — verify with a team using "Defect" produces a clear message, not silent empty results
+- [ ] **bugs.mjs:** WIQL query includes date filter — verify by adding `console.error(wiqlQuery)` during development and inspecting it
+- [ ] **summary skill:** Runs all four scripts in sequence with progress messages — verify by timing; if under 5 seconds total, scripts are probably not actually running
+- [ ] **/adi:update:** After update, existing Claude session still uses old scripts — verify by checking version output; warn user in post-update message
+- [ ] **/adi:update:** Config at `~/.adi/config.json` survives update unchanged — verify by checking `orgUrl`, `project`, and masked PAT before and after update
+- [ ] **All new skills:** Step 0 config guard uses same `installed_plugins.json` resolver pattern as `pr-metrics` — verify by copying the exact pattern, not re-implementing it
+
+---
+
+## Recovery Strategies
+
+When pitfalls occur despite prevention, how to recover.
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Sprint API 404 due to missing team segment | LOW | Add `{team}` to URL; default to project name slug; test |
+| Work item batch returns IDs but no details | LOW | Add POST batch call after relation fetch; add `adoPost` helper to ado-client.mjs |
+| Contributors under-count due to single-repo loop | MEDIUM | Rewrite loop to iterate all repos; re-verify aggregation logic |
+| Summary skill hits rate limits on large project | MEDIUM | Add sequential execution with progress messages; add `--summary` flag to each script |
+| Update overwrites user config | HIGH | Add config path assertion before any write; restore from backup; document recovery steps in README |
+| Post-update scripts use stale cache | LOW | Tell user to restart Claude Code; document in update output |
+| WIQL cap hit on bug query | LOW | Add date filter and `$top` cap; rerun |
+
+---
+
+## Pitfall-to-Phase Mapping
+
+How roadmap phases should address these pitfalls.
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Sprint API team-segment URL structure (Pitfall 1) | Phase building `/adi:sprint` | Confirm URL pattern in sprint.mjs before any test run |
+| Work item batch second call required (Pitfall 2) | Phase building `/adi:sprint` | Output JSON must contain `System.State` and `System.Title` |
+| Contributors per-repo loop required (Pitfall 3) | Phase building `/adi:contributors` | Test against project with 3+ repos; verify cross-repo aggregation |
+| Summary additive API cost (Pitfall 4) | Phase building `/adi:summary` | Run summary on large project; confirm no rate limit errors; confirm sequential progress output |
+| Update must not touch config.json (Pitfall 5) | Phase building `/adi:update` | Before-after config comparison test in acceptance criteria |
+| WIQL unbounded bug query (Pitfall 6) | Phase building `/adi:bugs` | Inspect WIQL string in script; confirm date filter and $top present |
+| adoGet orphan reuse | All new script phases | Code review: grep for `adoGet(` — should only appear in `ado-client.mjs` export, not in new scripts |
+| Post-update stale cache | Phase building `/adi:update` | Post-update message explicitly tells user to restart Claude Code |
+
+---
 
 ## Sources
 
-- [Azure DevOps Rate and Usage Limits](https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/rate-limits?view=azure-devops) -- official Microsoft documentation on TSTUs and throttling
-- [Azure DevOps REST API Versioning](https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/rest-api-versioning?view=azure-devops) -- version format and deprecation policy
-- [Azure DevOps PAT Authentication](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops) -- security best practices and scope management
-- [Azure DevOps Work Tracking Limits](https://learn.microsoft.com/en-us/azure/devops/organizations/settings/work/object-limits?view=azure-devops) -- 20K WIQL cap, revision limits
-- [Azure DevOps Integration Best Practices](https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/integration-bestpractices?view=azure-devops) -- avoiding rate limit hits
-- [Claude Code Skills Documentation](https://code.claude.com/docs/en/skills) -- skill structure, frontmatter, distribution, description budgets
-- [Claude Code Plugins Documentation](https://code.claude.com/docs/en/plugins) -- plugin system, manifest structure, marketplace distribution
-- [Claude Code Context Windows](https://platform.claude.com/docs/en/build-with-claude/context-windows) -- token limits and context management
-- [PAT Base64 Encoding Issues](https://developercommunity.visualstudio.com/content/problem/446754/pat-auth-docs-for-azure-devops-dont-mention-the-se.html) -- community-reported colon prefix issue
-- [WIQL Reference Syntax](https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax?view=azure-devops) -- query language limitations
-- [Azure DevOps Pagination Issues](https://learn.microsoft.com/en-us/answers/questions/5603409/azure-pipeline-api-is-not-accepting-the-continuati) -- continuation token handling problems
+- [Azure DevOps Iterations API — List](https://learn.microsoft.com/en-us/rest/api/azure/devops/work/iterations/list?view=azure-devops-rest-7.1) — confirmed team segment required in URL path; `$timeframe=current` supported
+- [Azure DevOps Iterations API — Get Iteration Work Items](https://learn.microsoft.com/en-us/rest/api/azure/devops/work/iterations/get-iteration-work-items?view=azure-devops-rest-7.1) — confirmed returns `workItemRelations[]` with IDs only, not full work item data
+- [Azure DevOps Git Commits API — Get Commits](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/commits/get-commits?view=azure-devops-rest-7.1) — confirmed per-repository scope; supports `searchCriteria.fromDate` and `searchCriteria.author`
+- [Azure DevOps WIQL — Query By Wiql](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/wiql/query-by-wiql?view=azure-devops-rest-7.1) — 20,000 item hard cap, VS402337 error
+- [Azure DevOps Work Item Limits](https://learn.microsoft.com/en-us/azure/devops/organizations/settings/work/object-limits?view=azure-devops) — 20K WIQL limit confirmed
+- [Claude Code Plugin Cache Stale Issue #15642](https://github.com/anthropics/claude-code/issues/15642) — CLAUDE_PLUGIN_ROOT points to old version after update; confirmed workaround is session restart / cache cleanup
+- [Azure DevOps Rate Limits](https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/rate-limits?view=azure-devops) — 200 TSTUs per 5-minute window; progressive throttling under load
+- v1.0 codebase — `scripts/ado-client.mjs`: confirmed `adoGet` orphan exists alongside 4 dedicated functions; all existing calls use dedicated functions; new scripts must follow the same pattern
+- v1.0 codebase — `skills/pr-metrics/SKILL.md`: confirmed `installed_plugins.json` resolver pattern; same pattern must be used verbatim in all new SKILL.md files
+
+---
+
+*Pitfalls research for: Azure DevOps Insights v1.1 — adding contributors, bugs, sprint, summary, update skills*
+*Researched: 2026-02-25*

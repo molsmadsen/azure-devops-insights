@@ -1,409 +1,552 @@
-# Architecture Patterns
+# Architecture Research
 
-**Domain:** Claude Code Plugin (Skill Pack) for Azure DevOps Insights
+**Domain:** Claude Code plugin — Azure DevOps Insights skill pack (v1.1 new skills integration)
 **Researched:** 2026-02-25
+**Confidence:** HIGH — based on direct inspection of all v1.0 source files
 
-## Recommended Architecture
-
-This project is a **Claude Code plugin** distributed via a GitHub-hosted marketplace. It contains multiple skills (slash commands), each backed by shared infrastructure for Azure DevOps API access, configuration management, and data formatting. Claude itself acts as the "presentation layer" -- skills feed it structured data and narrative prompts, and Claude produces the final written report.
-
-### High-Level Structure
-
-```
-ado-insights/                          # Plugin root (also npm package root)
-  .claude-plugin/
-    plugin.json                        # Plugin manifest (name, version, description)
-  skills/
-    setup/
-      SKILL.md                         # /ado-insights:setup -- configure org, project, PAT
-    pr-metrics/
-      SKILL.md                         # /ado-insights:pr-metrics -- PR review analysis
-    contributors/
-      SKILL.md                         # /ado-insights:contributors -- team activity
-    bug-report/
-      SKILL.md                         # /ado-insights:bug-report -- bug triage overview
-    project-state/
-      SKILL.md                         # /ado-insights:project-state -- sprint/backlog health
-  scripts/
-    ado-client.mjs                     # Azure DevOps REST API client (shared)
-    config.mjs                         # Config reader/writer (~/.ado-insights/config.json)
-    pr-metrics.mjs                     # Data fetching + processing for PR metrics
-    contributors.mjs                   # Data fetching + processing for contributors
-    bug-report.mjs                     # Data fetching + processing for bug report
-    project-state.mjs                  # Data fetching + processing for project state
-    setup.mjs                          # Interactive setup wizard
-  package.json                         # For npm distribution (optional, for marketplace npm source)
-  README.md
-```
-
-### Why This Structure
-
-Claude Code plugins follow a strict convention: `.claude-plugin/plugin.json` at the root, `skills/` directory containing `SKILL.md` files in named subdirectories. The plugin system copies the entire directory to a cache on install, so everything must be self-contained.
-
-Skills are markdown files -- they cannot run JavaScript directly. Instead, skills use the `!`command`` syntax for dynamic context injection or instruct Claude to execute scripts via `Bash` tool calls. This means the actual API logic lives in `scripts/` as standalone executables that Claude runs.
-
-## Component Boundaries
-
-| Component | Responsibility | Location | Communicates With |
-|-----------|---------------|----------|-------------------|
-| **Plugin Manifest** | Identity, version, metadata | `.claude-plugin/plugin.json` | Claude Code plugin system |
-| **Skill Files** | Prompt engineering, narrative instructions, tool permissions | `skills/*/SKILL.md` | Claude (as instructions), scripts (via Bash) |
-| **API Client** | HTTP calls to Azure DevOps REST API, auth header injection, pagination, error handling | `scripts/ado-client.mjs` | Config module, data scripts |
-| **Config Manager** | Read/write `~/.ado-insights/config.json`, validate config exists | `scripts/config.mjs` | API client, setup script, all data scripts |
-| **Data Scripts** | Fetch raw API data, compute metrics, output structured JSON | `scripts/*.mjs` (per-skill) | API client, stdout (for Claude to consume) |
-| **Setup Script** | Interactive config creation (org URL, project, PAT) | `scripts/setup.mjs` | Config manager, stdout |
-
-## Data Flow
-
-### Standard Skill Execution
-
-```
-User runs /ado-insights:pr-metrics
-        |
-        v
-Claude loads skills/pr-metrics/SKILL.md
-        |
-        v
-SKILL.md instructs Claude to run: node <plugin-root>/scripts/pr-metrics.mjs
-        |
-        v
-pr-metrics.mjs:
-  1. Loads config via config.mjs (~/.ado-insights/config.json)
-  2. Calls ado-client.mjs to fetch PR data from Azure DevOps REST API
-  3. Processes data (computes averages, identifies bottlenecks, etc.)
-  4. Outputs structured JSON/text to stdout
-        |
-        v
-Claude receives script output
-        |
-        v
-SKILL.md contains narrative instructions:
-  "Analyze this data and write a report covering: findings, anomalies, recommendations"
-        |
-        v
-Claude generates written narrative report for the user
-```
-
-### Setup Flow
-
-```
-User runs /ado-insights:setup
-        |
-        v
-SKILL.md instructs Claude to prompt user for: org URL, project name, PAT
-        |
-        v
-Claude collects values via conversation
-        |
-        v
-Claude runs: node <plugin-root>/scripts/setup.mjs --org <url> --project <name> --pat <token>
-        |
-        v
-setup.mjs:
-  1. Validates inputs (org URL format, PAT not empty)
-  2. Tests connection to Azure DevOps API
-  3. Writes ~/.ado-insights/config.json
-  4. Outputs success/failure message
-        |
-        v
-Claude confirms setup to user
-```
-
-### Key Design Decision: Scripts Output Data, Claude Narrates
-
-The scripts do NOT generate narrative text. They output structured data (JSON or formatted text with clear sections). The SKILL.md file contains the narrative prompt -- telling Claude how to interpret the data, what patterns to look for, and what format the report should take. This separation means:
-
-- Scripts are testable and deterministic
-- Narrative quality improves as Claude models improve (no code change needed)
-- Users get AI-interpreted insights, not just raw numbers
-
-## Patterns to Follow
-
-### Pattern 1: Skill File Structure
-
-Every skill follows the same template. The SKILL.md handles prompt engineering while delegating data collection to a script.
-
-**What:** Each SKILL.md has three sections: frontmatter, data collection instruction, narrative prompt.
-**When:** Every skill in the pack.
-**Example:**
-
-```yaml
 ---
-name: pr-metrics
-description: Analyze pull request review times, reviewer distribution, and bottlenecks in your Azure DevOps project.
+
+## Standard Architecture
+
+### System Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Claude Code CLI                               │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
+│  │  setup   │  │pr-metrics│  │contributors│  │  bugs   │            │
+│  │ SKILL.md │  │ SKILL.md │  │ SKILL.md  │  │ SKILL.md│            │
+│  └────┬─────┘  └────┬─────┘  └─────┬────┘  └────┬────┘            │
+│       │              │              │             │                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
+│  │  sprint  │  │ summary  │  │  update  │  │   help   │            │
+│  │ SKILL.md │  │ SKILL.md │  │ SKILL.md │  │ SKILL.md │            │
+│  └────┬─────┘  └─────┬────┘  └──────────┘  └──────────┘            │
+│       │               │                                              │
+│       └───────────────┴──────────────────────┐                      │
+│                       node <script>.mjs       │                      │
+├───────────────────────────────────────────────┼─────────────────────┤
+│                    Script Layer               │                      │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │   scripts/ado-client.mjs  (shared HTTP + auth functions)    │    │
+│  └──────────────────────────┬──────────────────────────────────┘    │
+│  ┌───────────────────────────┴──────────────────────────────────┐   │
+│  │   scripts/config.mjs  (loadConfig / saveConfig / configExists) │  │
+│  └──────────────────────────────────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────────────┤
+│                    Data / External Layer                             │
+│  ┌──────────────────────┐   ┌──────────────────────────────────┐    │
+│  │  ~/.adi/config.json  │   │  Azure DevOps REST API v7.1      │    │
+│  │  (org/project/PAT)   │   │  (git, wit, work endpoints)      │    │
+│  └──────────────────────┘   └──────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Component Responsibilities
+
+| Component | Responsibility | Implementation |
+|-----------|----------------|----------------|
+| `skills/*/SKILL.md` | Define slash command; instruct Claude on steps; invoke scripts via Bash | Markdown with YAML frontmatter (`allowed-tools: Bash(node *)`) |
+| `scripts/<skill>.mjs` | Fetch ADO data, compute metrics, emit JSON to stdout | Node.js ESM `.mjs`; stderr for progress; stdout is JSON only |
+| `scripts/ado-client.mjs` | Shared HTTP client — auth header, per-resource fetch functions | Named async exports; config always passed explicitly |
+| `scripts/config.mjs` | Read/write `~/.adi/config.json`; existence check; PAT masking | `loadConfig`, `saveConfig`, `configExists`, `maskPat` exports |
+| `.claude-plugin/plugin.json` | Claude Code plugin manifest — registers the `adi` plugin name | JSON metadata; skills auto-discovered from `skills/` |
+| `.claude-plugin/marketplace.json` | Two-step marketplace install entry (GitHub source) | References plugin repo; version field |
+
+---
+
+## Recommended Project Structure (v1.1 additions)
+
+```
+azure-devops-insights/
+├── .claude-plugin/
+│   ├── plugin.json              # MODIFY: bump version to 1.1.0
+│   └── marketplace.json         # MODIFY: bump version to 1.1.0
+├── skills/
+│   ├── setup/SKILL.md           # NO CHANGE
+│   ├── help/SKILL.md            # MODIFY: promote new commands from "coming soon" to active
+│   ├── pr-metrics/SKILL.md      # NO CHANGE
+│   ├── contributors/SKILL.md    # NEW
+│   ├── bugs/SKILL.md            # NEW
+│   ├── sprint/SKILL.md          # NEW
+│   ├── summary/SKILL.md         # NEW — orchestrates four sub-script calls
+│   └── update/SKILL.md          # NEW — self-update mechanism
+├── scripts/
+│   ├── config.mjs               # NO CHANGE
+│   ├── ado-client.mjs           # MODIFY: add new ADO fetch functions
+│   ├── setup.mjs                # NO CHANGE
+│   ├── pr-metrics.mjs           # NO CHANGE
+│   ├── contributors.mjs         # NEW
+│   ├── bugs.mjs                 # NEW
+│   ├── sprint.mjs               # NEW
+│   └── update.mjs               # NEW
+├── CHANGELOG.md                 # MODIFY: add v1.1.0 section
+└── README.md                    # MODIFY: add new commands to skill list
+```
+
+### Structure Rationale
+
+- **`skills/<name>/SKILL.md`:** One directory per skill, matching the v1.0 pattern. Claude Code discovers skills by directory name within `skills/`.
+- **`scripts/<skill>.mjs`:** One script per skill, named to match. Each script is independently runnable (`node scripts/contributors.mjs`), which aids testing.
+- **`scripts/ado-client.mjs` extended — not replaced:** New fetch functions (work items, iterations, commits, pushes) added to the shared client, not inlined in individual scripts. This matches how all existing functions are organized.
+- **No `scripts/summary.mjs`:** The summary skill orchestrates the four existing scripts via sequential Bash calls in the SKILL.md. No aggregation script is needed.
+- **`scripts/update.mjs`:** Self-contained; does not use `ado-client.mjs` (talks to GitHub API, not ADO).
+
+---
+
+## Architectural Patterns
+
+### Pattern 1: Skill → Script → JSON → Narrative
+
+The established pattern that every v1.1 analysis skill must follow exactly.
+
+**What:** A skill's SKILL.md instructs Claude to run a node script via Bash. The script outputs one JSON object to stdout. Claude reads the JSON and writes a written narrative.
+
+**When to use:** All analysis skills — contributors, bugs, sprint.
+
+**SKILL.md step structure (copy from pr-metrics/SKILL.md):**
+```markdown
+---
+name: contributors
+description: AI-narrated contributor activity report for your Azure DevOps project.
 disable-model-invocation: true
 allowed-tools: Bash(node *)
 ---
 
-# PR Metrics Analysis
+## Step 0: Guard — check config exists
 
-Run the data collection script:
+Run this command to resolve the plugin root and check for config:
 
-` ` `bash
-node ${CLAUDE_PLUGIN_ROOT}/scripts/pr-metrics.mjs
-` ` `
+` ``bash
+PLUGIN_ROOT=`node -e "const f=require('fs'),h=require('os').homedir();try{const p=JSON.parse(f.readFileSync(h+'/.claude/plugins/installed_plugins.json','utf8'));const plugins=p.plugins||p;const e=Object.values(plugins).find(x=>String(x.name||x.pluginName||x.installPath||'').includes('adi'));console.log((e&&e.installPath)||process.env.CLAUDE_PLUGIN_ROOT||'.')}catch(e){console.log(process.env.CLAUDE_PLUGIN_ROOT||'.')}"` && node "$PLUGIN_ROOT/scripts/contributors.mjs" --check-config
+` ``
 
-## How to interpret the output
-
-The script outputs JSON with the following structure:
-- `summary`: High-level stats (total PRs, average review time, etc.)
-- `reviewers`: Per-reviewer breakdown
-- `bottlenecks`: PRs that exceeded normal review time
-- `trends`: Week-over-week changes
-
-## Write the report
-
-Using the data above, write a narrative report that covers:
-
-1. **Overview**: How healthy is the PR process? One paragraph summary.
-2. **Key findings**: 3-5 bullet points of the most important observations.
-3. **Bottlenecks**: Which PRs are stuck and why? Who is overloaded?
-4. **Recommendations**: 2-3 actionable suggestions to improve.
-
-Be specific -- reference actual numbers, reviewer names, and PR titles.
-If the script fails, explain the error and suggest how to fix it.
+...
 ```
 
-### Pattern 2: Shared API Client with Pagination
+**The PLUGIN_ROOT resolver one-liner must be copied verbatim** from `skills/pr-metrics/SKILL.md` into every new skill. It handles both marketplace-installed (`installed_plugins.json`) and `--plugin-dir` installs (`CLAUDE_PLUGIN_ROOT` env fallback).
 
-**What:** A single `ado-client.mjs` module handles all Azure DevOps HTTP calls, including auth, base URL construction, pagination (continuation tokens), and error mapping.
-**When:** Every data script imports this instead of making raw fetch calls.
-**Example:**
+### Pattern 2: Script Internal Structure (Node.js ESM)
 
+Every new script follows the same internal layout as `pr-metrics.mjs`.
+
+**Key invariants:**
+- `stdout` is JSON only. Progress messages go to `process.stderr.write(...)` only.
+- Import `loadConfig`, `configExists` from `./config.mjs`.
+- Import named functions from `./ado-client.mjs` — never use the orphaned `adoGet` (it calls `loadConfig` internally, breaking the explicit-config convention established in v1.0).
+- Pass config explicitly to all `ado-client` functions: `adoGetX(config, ...)`.
+- Support `--check-config` flag for the Step 0 guard.
+- Wrap `main()` in `.catch(e => { console.log(JSON.stringify({ error: ... })); process.exit(1); })`.
+
+**Script skeleton:**
 ```javascript
-// scripts/ado-client.mjs
-import { loadConfig } from './config.mjs';
+// scripts/contributors.mjs
+import { loadConfig, configExists } from './config.mjs';
+import { adoGetCommitsByRepo, adoGetRepos } from './ado-client.mjs';
 
-export async function adoFetch(path, params = {}) {
-  const config = loadConfig();
-  const url = new URL(
-    `${config.orgUrl}/${config.project}/_apis/${path}`
-  );
-  url.searchParams.set('api-version', '7.1');
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v);
-  }
+const args = Object.fromEntries(
+  process.argv.slice(2)
+    .filter(a => a.startsWith('--'))
+    .map(a => { const eq = a.indexOf('='); return eq > 0 ? [a.slice(2, eq), a.slice(eq + 1)] : [a.slice(2), 'true']; })
+);
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Authorization': `Basic ${Buffer.from(`:${config.pat}`).toString('base64')}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`);
-  }
-
-  return response.json();
+if (args['check-config'] === 'true') {
+  console.log(JSON.stringify({ configMissing: !configExists() }));
+  process.exit(0);
 }
 
-export async function adoFetchAll(path, params = {}) {
-  let results = [];
-  let continuationToken = null;
-
-  do {
-    const queryParams = { ...params };
-    if (continuationToken) {
-      queryParams['continuationToken'] = continuationToken;
-    }
-
-    const response = await adoFetch(path, queryParams);
-    results = results.concat(response.value || []);
-    continuationToken = response.continuationToken || null;
-  } while (continuationToken);
-
-  return results;
-}
-```
-
-### Pattern 3: Config as Simple JSON File
-
-**What:** Config stored as `~/.ado-insights/config.json` with org URL, project, and PAT.
-**When:** All scripts read config on startup; setup script writes it.
-**Example:**
-
-```javascript
-// scripts/config.mjs
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { homedir } from 'os';
-
-const CONFIG_DIR = join(homedir(), '.ado-insights');
-const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
-
-export function loadConfig() {
+async function main() {
+  let config;
   try {
-    return JSON.parse(readFileSync(CONFIG_FILE, 'utf8'));
-  } catch {
-    throw new Error(
-      'Not configured. Run /ado-insights:setup first.\n' +
-      `Expected config at: ${CONFIG_FILE}`
-    );
+    config = loadConfig();
+  } catch (e) {
+    console.log(JSON.stringify({ error: { type: 'config', message: e.message } }));
+    process.exit(1);
   }
+
+  // fetch + compute ...
+
+  console.log(JSON.stringify(result));
 }
 
-export function saveConfig(config) {
-  mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
-}
+main().catch(e => {
+  console.log(JSON.stringify({ error: { type: 'unexpected', message: e.message } }));
+  process.exit(1);
+});
 ```
 
-### Pattern 4: Plugin Root Path Resolution
+### Pattern 3: ADO Client Extension
 
-**What:** Use `${CLAUDE_PLUGIN_ROOT}` in SKILL.md to reference scripts, since plugins are cached in a different location than where they were installed from.
-**When:** Every SKILL.md that calls a script.
+New ADO endpoints belong in `ado-client.mjs` as named exports, not inline in skill scripts.
 
-This is critical. When Claude Code installs a plugin, it copies the directory to `~/.claude/plugins/cache/`. Hardcoded paths will break. The `${CLAUDE_PLUGIN_ROOT}` variable resolves to the actual cached location at runtime.
+**What:** Export a named async function per ADO resource type. Function signature: `async function adoGetX(config, params = {})`. Config always passed explicitly.
 
-## Anti-Patterns to Avoid
+**New functions needed for v1.1 (add to `scripts/ado-client.mjs`):**
 
-### Anti-Pattern 1: Embedding Logic in SKILL.md
+| Function | ADO Endpoint | Used By |
+|----------|-------------|---------|
+| `adoGetCommitsByRepo(config, repoId, params)` | `git/repositories/{id}/commits` | `contributors.mjs` |
+| `adoGetPushes(config, repoId, params)` | `git/repositories/{id}/pushes` | `contributors.mjs` |
+| `adoRunWiql(config, wiql)` | `wit/wiql` (POST) | `bugs.mjs`, `sprint.mjs` |
+| `adoGetWorkItemsBatch(config, ids)` | `wit/workitemsbatch` (POST, max 200 IDs) | `bugs.mjs`, `sprint.mjs` |
+| `adoGetIterations(config, params)` | `work/teamsettings/iterations` | `sprint.mjs` |
+| `adoGetIterationWorkItems(config, iterationId)` | `work/teamsettings/iterations/{id}/workitems` | `sprint.mjs` |
 
-**What:** Writing complex data processing or API calls directly in the skill markdown, relying on Claude to execute inline code blocks.
-**Why bad:** Non-deterministic, untestable, fragile. Claude may modify the code, make mistakes in execution, or hallucinate API responses.
-**Instead:** Keep all logic in scripts. SKILL.md only orchestrates (run this script) and interprets (narrate this output).
+**Why centralize in ado-client.mjs:** Keeps the 203/401/403 error handling, `buildAuthHeader`, and URL construction in one place. When ADO changes behavior (like the 203 login redirect quirk already documented), only one file changes.
 
-### Anti-Pattern 2: Global npm Install Exposing CLI Binary
+**Note on WIQL endpoint:** `wit/wiql` requires a POST with a JSON body `{ "query": "SELECT ... FROM workitems WHERE ..." }`. This is a departure from the GET-only pattern of existing functions. The new `adoRunWiql` function must accept a WIQL string and issue a POST.
 
-**What:** Building a traditional `npm install -g` CLI tool with a bin entry point.
-**Why bad:** Claude Code has a first-class plugin system with marketplace distribution. A CLI binary does not integrate with Claude Code's skill discovery, namespace system, or plugin lifecycle. Users would need to run shell commands instead of slash commands.
-**Instead:** Distribute as a Claude Code plugin via a GitHub-hosted marketplace. The npm source type in marketplace.json can be used if npm distribution is also desired, but the primary interface is the plugin system.
+**Work item batch fetch limit:** `wit/workitemsbatch` accepts a maximum of 200 IDs per call. `bugs.mjs` and `sprint.mjs` must batch IDs in groups of 200, following the same paged pattern as `fetchPagedPrs` in `pr-metrics.mjs`.
 
-### Anti-Pattern 3: Scripts That Generate Narrative Text
+### Pattern 4: /adi:summary — Aggregation via Sequential Script Calls
 
-**What:** Having `pr-metrics.mjs` output a full English report.
-**Why bad:** Removes Claude from the value chain. The whole point is AI-narrated analysis. Hardcoded narratives are static, cannot adapt to context, and cannot improve with model updates.
-**Instead:** Scripts output structured data (JSON). SKILL.md contains the narrative prompt. Claude synthesizes the report.
+`/adi:summary` aggregates data from all four analysis scripts. It has no dedicated aggregation script.
 
-### Anti-Pattern 4: Storing PAT in Environment Variables Only
+**What:** `skills/summary/SKILL.md` instructs Claude to run each of the four existing data scripts as sequential Bash steps, then synthesize the results into a unified narrative. Claude holds all four JSON payloads simultaneously in context.
 
-**What:** Requiring `ADO_PAT` env var instead of a config file.
-**Why bad:** Every new terminal session requires re-export. Casual users will be frustrated. Env vars are also easy to accidentally log.
-**Instead:** One-time setup writes to `~/.ado-insights/config.json`. Support env var override as a fallback for CI scenarios, but config file is primary.
+**Why no `scripts/summary.mjs`:**
+- Would duplicate all fetch logic from four other scripts
+- Creates a dependency chain: summary.mjs must change whenever any sub-script's output schema changes
+- Claude's context window handles four JSON payloads without issue
+- Consistent with the core pattern: scripts are data fetchers, Claude is the synthesizer
 
-### Anti-Pattern 5: One Mega-Skill
+**Summary SKILL.md step structure:**
+```markdown
+## Step 0: Guard — check config exists
+[same guard as other skills]
 
-**What:** A single `/ado-insights:report` that does everything.
-**Why bad:** Slow (fetches all data every time), overwhelming output, cannot be extended incrementally.
-**Instead:** Focused skills (`pr-metrics`, `contributors`, `bug-report`, `project-state`) that each do one thing well.
+## Step 1: Fetch PR metrics
+` ``bash
+PLUGIN_ROOT=`...` && node "$PLUGIN_ROOT/scripts/pr-metrics.mjs"
+` ``
+Store JSON output as PR_DATA. If error key present, note failure and continue.
 
-## Distribution Mechanism
+## Step 2: Fetch contributor activity
+` ``bash
+PLUGIN_ROOT=`...` && node "$PLUGIN_ROOT/scripts/contributors.mjs"
+` ``
+Store JSON output as CTR_DATA. If error key present, note failure and continue.
 
-### Primary: GitHub Marketplace
+## Step 3: Fetch bug report
+` ``bash
+PLUGIN_ROOT=`...` && node "$PLUGIN_ROOT/scripts/bugs.mjs"
+` ``
+Store JSON output as BUG_DATA. If error key present, note failure and continue.
 
-Host the plugin in a public GitHub repository. Create a separate marketplace repository (or use the same repo) with `.claude-plugin/marketplace.json`:
+## Step 4: Fetch sprint status
+` ``bash
+PLUGIN_ROOT=`...` && node "$PLUGIN_ROOT/scripts/sprint.mjs"
+` ``
+Store JSON output as SPR_DATA. If error key present, note failure and continue.
 
-```json
-{
-  "name": "ado-insights-marketplace",
-  "owner": { "name": "ado-insights" },
-  "plugins": [
-    {
-      "name": "ado-insights",
-      "source": {
-        "source": "github",
-        "repo": "your-org/ado-insights"
-      },
-      "description": "AI-narrated Azure DevOps project insights"
-    }
-  ]
-}
+## Step 5: Write the unified narrative
+Using all four payloads, write a project health synthesis covering:
+...
 ```
 
-Users install with:
-```
-/plugin marketplace add your-org/ado-insights-marketplace
-/plugin install ado-insights@ado-insights-marketplace
-```
+**Error degradation in summary:** Each sub-script step must degrade gracefully. If `bugs.mjs` fails (e.g., Work Items permission not granted), the summary continues with the remaining three payloads and notes the missing section. Do not fail the entire summary when one signal is unavailable.
 
-### Secondary: npm Source
+### Pattern 5: /adi:update — Self-Update Mechanism
 
-The marketplace entry can also use npm as a source if the package is published:
+`/adi:update` is structurally different from analysis skills — it has no ADO API dependency and operates on the local plugin filesystem.
 
-```json
-{
-  "name": "ado-insights",
-  "source": {
-    "source": "npm",
-    "package": "ado-insights",
-    "version": "^1.0.0"
-  }
-}
-```
+**What:** The skill checks GitHub Releases API for a newer version, shows changelog, asks for confirmation, then downloads and extracts the release archive to the plugin directory.
 
-### Tertiary: Direct Plugin Dir (Development)
+**Skill step structure:**
+```markdown
+## Step 1: Check for updates
 
-For local development and testing:
-```bash
-claude --plugin-dir ./ado-insights
-```
+` ``bash
+PLUGIN_ROOT=`...` && node "$PLUGIN_ROOT/scripts/update.mjs" --check --plugin-root="$PLUGIN_ROOT"
+` ``
+Output: { currentVersion, latestVersion, hasUpdate, changelog, downloadUrl }
 
-## Azure DevOps REST API Surface
+## Step 2: Show changelog and confirm
+If hasUpdate: show changelog excerpt, ask user to confirm update.
+If no update: tell user they are on the latest version.
 
-The skills need these API endpoints (all read-only, all under `{orgUrl}/{project}/_apis/`):
+## Step 3: Apply update (only if user confirmed)
+` ``bash
+PLUGIN_ROOT=`...` && node "$PLUGIN_ROOT/scripts/update.mjs" --apply --plugin-root="$PLUGIN_ROOT"
+` ``
+Output: { success, newVersion, filesUpdated }
 
-| Skill | API Endpoints | API Version |
-|-------|--------------|-------------|
-| **pr-metrics** | `git/repositories`, `git/pullrequests` (by project), `git/repositories/{id}/pullrequests/{id}/reviewers`, `git/repositories/{id}/pullrequests/{id}/threads` | 7.1 |
-| **contributors** | `git/repositories/{id}/commits`, `git/repositories/{id}/pushes`, `git/pullrequests` | 7.1 |
-| **bug-report** | `wit/wiql` (query), `wit/workitems` (batch get) | 7.1 |
-| **project-state** | `work/teamsettings/iterations` (current sprint), `wit/wiql`, `wit/workitems` | 7.1 |
-| **setup** | `projects` (validate connection) | 7.1 |
-
-All endpoints use Basic auth with PAT: `Authorization: Basic base64(:PAT)`.
-
-Pagination uses either `$top`/`$skip` or `continuationToken` depending on the endpoint. The shared API client must handle both patterns.
-
-## Build Order (Dependencies)
-
-The following build order reflects true dependencies -- each phase uses what was built before it:
-
-```
-Phase 1: Foundation
-  config.mjs          -- no dependencies, enables everything else
-  ado-client.mjs      -- depends on config.mjs
-  setup skill + script -- depends on config.mjs and ado-client.mjs
-  plugin.json          -- just metadata, but needed for testing
-
-Phase 2: First Skill (proves the pattern)
-  pr-metrics.mjs      -- depends on ado-client.mjs
-  pr-metrics SKILL.md  -- depends on pr-metrics.mjs existing
-
-Phase 3: Remaining Skills (parallel, all follow the pattern)
-  contributors.mjs + SKILL.md
-  bug-report.mjs + SKILL.md
-  project-state.mjs + SKILL.md
-
-Phase 4: Distribution
-  marketplace.json
-  README.md
-  npm package.json (if publishing to npm)
+## Step 4: Narrate what changed
 ```
 
-**Phase ordering rationale:**
-- Config and API client are imported by every data script -- they must exist first.
-- Setup must work before any other skill can run (user needs config).
-- PR metrics is the best "first skill" because it exercises the most common API patterns (list repos, list PRs, get details) and proves the skill-calls-script-Claude-narrates architecture.
-- Remaining skills are independent of each other and can be built in parallel.
-- Distribution is last because you need working skills to distribute.
+**`scripts/update.mjs` implementation:**
+```javascript
+// --check mode:
+// fetch('https://api.github.com/repos/your-org/azure-devops-insights/releases/latest')
+// Read current version from plugin.json at args.pluginRoot
+// Compare versions, extract changelog excerpt from release body
+// Output: { currentVersion, latestVersion, hasUpdate, changelog, downloadUrl }
 
-## Scalability Considerations
+// --apply mode:
+// Download tarball_url from GitHub release using fetch() (Node 18+ built-in)
+// Extract to temp dir using Node.js built-in zlib (no npm dependencies)
+// Copy files to args.pluginRoot
+// Output: { success, newVersion, filesUpdated }
+```
 
-| Concern | At 1 project | At 10 projects | At enterprise scale |
-|---------|-------------|----------------|---------------------|
-| **Config** | Single config.json | Config supports named profiles (`--profile`) | Managed settings via enterprise plugin deployment |
-| **API rate limits** | No issue | Add request throttling to ado-client.mjs | Implement caching layer with TTL |
-| **Data volume** | Fetch all PRs | Add date range filters (last 30/90 days) | Pagination + streaming output for large datasets |
-| **Auth** | PAT per user | PAT per user | Consider Entra ID / service principal auth |
+**Critical constraints for update.mjs:**
+- Uses `fetch()` (Node.js 18+ built-in) for GitHub API — zero npm dependencies
+- Uses Node.js built-in streams for archive extraction — no `tar` npm package
+- MUST NEVER touch `~/.adi/config.json` — user credentials live outside the plugin directory
+- MUST NOT auto-apply — `--apply` only runs when SKILL.md step explicitly calls it after user confirmation
+- Plugin root is passed as `--plugin-root` CLI arg from SKILL.md (not inferred by `import.meta.url` inside the script — fragile under different install methods)
+- GitHub Releases API rate limit: 60 req/hr unauthenticated on public repo — acceptable for on-demand update checks
 
-For v1, the single-project single-PAT model is correct. Date range filtering should be built in from the start (default: last 30 days) to avoid hitting API limits on active projects.
+---
+
+## Data Flow
+
+### Standard Analysis Skill Flow
+
+```
+User: /adi:contributors
+    |
+    v
+skills/contributors/SKILL.md
+    |
+    Step 0: node scripts/contributors.mjs --check-config
+    |         └─> config.mjs:configExists() → JSON: { configMissing: false }
+    |
+    Step 2: node scripts/contributors.mjs [--days=N] [--project=X]
+    |         |
+    |         ├─> config.mjs:loadConfig()  ← ~/.adi/config.json
+    |         |
+    |         ├─> ado-client.mjs:adoGetRepos(config)
+    |         |     └─> fetch(ADO /git/repositories) — auth: Basic base64(:PAT)
+    |         |
+    |         ├─> ado-client.mjs:adoGetCommitsByRepo(config, repoId, params)
+    |         |     └─> fetch(ADO /git/repositories/{id}/commits)
+    |         |
+    |         └─> stdout: JSON { summary, activeContributors, quietContributors, ... }
+    |             stderr: "Fetching commits..." (discarded by Claude)
+    |
+    Step 3: Claude reads JSON → writes contributor activity narrative
+```
+
+### Summary Aggregation Flow
+
+```
+User: /adi:summary
+    |
+    v
+skills/summary/SKILL.md
+    |
+    ├── Step 1: node scripts/pr-metrics.mjs   → JSON_PR  (or { error })
+    ├── Step 2: node scripts/contributors.mjs → JSON_CTR (or { error })
+    ├── Step 3: node scripts/bugs.mjs         → JSON_BUG (or { error })
+    ├── Step 4: node scripts/sprint.mjs       → JSON_SPR (or { error })
+    |
+    Step 5: Claude holds all four JSON payloads in context
+            Sections that errored are noted as "unavailable"
+            Writes unified project health narrative from available signals
+```
+
+### Update Flow
+
+```
+User: /adi:update
+    |
+    v
+skills/update/SKILL.md
+    |
+    Step 1: node scripts/update.mjs --check --plugin-root="$PLUGIN_ROOT"
+    |         └─> fetch(api.github.com/repos/.../releases/latest)
+    |             → JSON: { currentVersion, latestVersion, hasUpdate, changelog }
+    |
+    Step 2: Claude shows changelog, asks user to confirm
+    |
+    Step 3 (if confirmed):
+    |       node scripts/update.mjs --apply --plugin-root="$PLUGIN_ROOT"
+    |         └─> Download + extract release archive to $PLUGIN_ROOT
+    |             → JSON: { success, newVersion, filesUpdated }
+    |
+    Step 4: Claude narrates what changed
+```
+
+---
+
+## New vs. Modified Files (Explicit List)
+
+### New Files (v1.1)
+
+| File | Type | Purpose |
+|------|------|---------|
+| `skills/contributors/SKILL.md` | Skill | `/adi:contributors` slash command |
+| `skills/bugs/SKILL.md` | Skill | `/adi:bugs` slash command |
+| `skills/sprint/SKILL.md` | Skill | `/adi:sprint` slash command |
+| `skills/summary/SKILL.md` | Skill | `/adi:summary` — orchestrates four sub-scripts, no dedicated script |
+| `skills/update/SKILL.md` | Skill | `/adi:update` — check and apply self-update |
+| `scripts/contributors.mjs` | Script | Fetch commit/push activity per author, identify active vs. quiet |
+| `scripts/bugs.mjs` | Script | Fetch work items of type Bug, compute severity distribution and trends |
+| `scripts/sprint.mjs` | Script | Fetch current iteration + work items, compute completion and velocity |
+| `scripts/update.mjs` | Script | Check GitHub releases, download and apply release archive |
+
+### Modified Files (v1.1)
+
+| File | What Changes |
+|------|-------------|
+| `skills/help/SKILL.md` | Move five commands from "Coming in future versions" to the main command table |
+| `scripts/ado-client.mjs` | Add exports: `adoGetCommitsByRepo`, `adoGetPushes`, `adoRunWiql`, `adoGetWorkItemsBatch`, `adoGetIterations`, `adoGetIterationWorkItems` |
+| `.claude-plugin/plugin.json` | Bump `version` from `1.0.0` to `1.1.0` |
+| `.claude-plugin/marketplace.json` | Bump `version` from `1.0.0` to `1.1.0` |
+| `CHANGELOG.md` | Add `[1.1.0]` section listing all new skills |
+| `README.md` | Add new commands to the feature list and quick-start |
+
+### Files NOT Changed (v1.1)
+
+| File | Why Stable |
+|------|-----------|
+| `scripts/config.mjs` | Auth/config system complete; no new fields needed |
+| `scripts/setup.mjs` | Setup flow complete; does not need to change for new skills |
+| `scripts/pr-metrics.mjs` | Feature-complete; summary calls it as-is |
+| `skills/setup/SKILL.md` | No change to setup flow |
+| `skills/pr-metrics/SKILL.md` | No change to PR metrics skill |
+
+---
+
+## Build Order (Dependency-Respecting)
+
+```
+Step 1: Extend scripts/ado-client.mjs
+  Add new fetch functions: adoGetCommitsByRepo, adoGetPushes,
+  adoRunWiql, adoGetWorkItemsBatch, adoGetIterations, adoGetIterationWorkItems.
+  Rationale: All new data scripts import from ado-client.mjs. Build the
+  shared foundation before any individual skill scripts.
+
+Step 2: Build /adi:contributors
+  scripts/contributors.mjs + skills/contributors/SKILL.md
+  Rationale: Git commits/pushes API — same git surface as pr-metrics.
+  Simplest new data domain. Good first skill to validate the pattern
+  extension works end-to-end.
+
+Step 3: Build /adi:bugs
+  scripts/bugs.mjs + skills/bugs/SKILL.md
+  Rationale: Introduces the wit (Work Items) API surface for the first time.
+  WIQL POST + workitemsbatch pattern established here is reused by sprint.
+
+Step 4: Build /adi:sprint
+  scripts/sprint.mjs + skills/sprint/SKILL.md
+  Rationale: Depends on wit pattern from Step 3 plus the iterations API.
+  Most complex data model (team context + iteration ID lookup + batch work
+  items). Build after bugs so the wit pattern is already established.
+
+Step 5: Build /adi:summary
+  skills/summary/SKILL.md only (no new script)
+  Rationale: Depends on all four data scripts existing and having known JSON
+  output schemas. Build only after Steps 2-4 are complete and verified.
+  The SKILL.md simply sequences calls to the four existing scripts.
+
+Step 6: Build /adi:update
+  scripts/update.mjs + skills/update/SKILL.md
+  Rationale: Entirely independent of ADO API. Can be built at any point
+  after Step 1, but placed here so all feature skills exist before the
+  update mechanism ships them.
+
+Step 7: Update help, manifests, and docs
+  skills/help/SKILL.md (promote commands)
+  .claude-plugin/plugin.json (version bump)
+  .claude-plugin/marketplace.json (version bump)
+  CHANGELOG.md + README.md
+  Rationale: Documentation updated only after all skills are built and
+  verified. Help lists commands that actually exist.
+```
+
+---
+
+## Scaling Considerations
+
+This is a CLI plugin with no server component. "Scaling" means handling large ADO projects.
+
+| Scale | Architecture Adjustments |
+|-------|--------------------------|
+| Small project (<50 repos, <500 work items) | All scripts run fine with single API call per resource type |
+| Medium project (50-200 repos, 500-5000 work items) | Work item WIQL queries need `$top` limits; contributors script needs per-repo batching |
+| Large project (200+ repos, 5000+ work items) | WIQL has a 20,000 item default cap; apply `--days` filtering; sprint must scope to team, not full project |
+
+**First bottleneck for new skills:** Work Items batch fetch. ADO `wit/workitemsbatch` accepts max 200 IDs per call; WIQL returns IDs only. `bugs.mjs` and `sprint.mjs` must batch-fetch work item details in groups of 200 — the same paged pattern already used in `fetchPagedPrs` in `pr-metrics.mjs`.
+
+---
+
+## Anti-Patterns
+
+### Anti-Pattern 1: Using the Orphaned `adoGet` Function
+
+**What people do:** Import `adoGet` from `ado-client.mjs` because it looks like a universal fetch helper.
+
+**Why it's wrong:** `adoGet` calls `loadConfig()` internally (implicit config loading). The convention established by Phase 2 (`pr-metrics.mjs`) is explicit config passing: `const config = loadConfig()` at the top of `main()`, then `adoGetX(config, ...)`. Using `adoGet` breaks this convention and causes confusion about where config is loaded. This is documented as a known issue in PROJECT.md.
+
+**Do this instead:** Import and use named functions (`adoGetPrsByProject`, `adoGetRepos`, etc.). Add new named functions to `ado-client.mjs` for new endpoints. Always pass config explicitly.
+
+### Anti-Pattern 2: Writing Progress Messages to stdout
+
+**What people do:** `console.log('Fetching commits...')` as a progress indicator.
+
+**Why it's wrong:** stdout is JSON-only. Claude parses the entire stdout as JSON. Any non-JSON line on stdout breaks parsing and the skill fails with a cryptic error.
+
+**Do this instead:** `process.stderr.write('Fetching commits...\n')` for all progress messages. Reserve `console.log(JSON.stringify(...))` for the single final output object.
+
+### Anti-Pattern 3: Inline HTTP in Skill Scripts
+
+**What people do:** Copy the `fetch()` + auth header pattern directly into `contributors.mjs`.
+
+**Why it's wrong:** Duplicates the 203/401/403 error classification, duplicates `buildAuthHeader`, and creates N copies of the retry logic. When ADO changes behavior, all scripts need updating independently.
+
+**Do this instead:** Add a new export function to `ado-client.mjs`. Keep all HTTP logic centralized.
+
+### Anti-Pattern 4: A Summary Script That Re-fetches Everything
+
+**What people do:** Create `scripts/summary.mjs` that imports functions from all four other scripts and runs them internally.
+
+**Why it's wrong:** Creates a dependency chain where `summary.mjs` must be updated whenever any sub-script's internal structure changes. Also conceptually duplicates fetch logic that already works in the individual scripts.
+
+**Do this instead:** `skills/summary/SKILL.md` calls each sub-script as a separate Bash step. Claude aggregates the four JSON payloads. No aggregator script needed.
+
+### Anti-Pattern 5: Update Script Inferring Its Own Location
+
+**What people do:** `scripts/update.mjs` uses `import.meta.url` or walks `__dirname` to discover where it is installed.
+
+**Why it's wrong:** Fragile under different install methods (marketplace copy vs. `--plugin-dir` symlink). The SKILL.md already has the correct PLUGIN_ROOT resolver.
+
+**Do this instead:** SKILL.md resolves `$PLUGIN_ROOT` and passes it explicitly: `node "$PLUGIN_ROOT/scripts/update.mjs" --plugin-root="$PLUGIN_ROOT" --apply`. The script accepts `--plugin-root` as a CLI arg.
+
+---
+
+## Integration Points
+
+### External Services
+
+| Service | Integration Pattern | Notes |
+|---------|---------------------|-------|
+| Azure DevOps REST API v7.1 | `fetch()` with Basic auth (`base64(:PAT)`); explicit config passed to each call | 203 = auth failure (not 401); 403 = missing permission. Both handled in `ado-client.mjs`. Documented 203 quirk must be preserved in new functions. |
+| GitHub Releases API | `fetch('https://api.github.com/repos/.../releases/latest')` — no auth for public repo | Used only by `update.mjs`. Rate limit: 60 req/hr unauthenticated — acceptable for on-demand check. |
+
+### Internal Boundaries
+
+| Boundary | Communication | Notes |
+|----------|---------------|-------|
+| `SKILL.md` to script | Bash subprocess; stdout JSON; stderr discarded | Any non-JSON on stdout breaks the skill. This is the most fragile boundary. |
+| Script to `ado-client.mjs` | ES module import; synchronous function calls | Config always passed explicitly. Never use orphaned `adoGet`. |
+| Script to `config.mjs` | ES module import; `loadConfig()` in `main()` | Error on missing config is typed `{ type: 'config' }`. |
+| `summary/SKILL.md` to sub-scripts | Four sequential Bash calls; independent JSON payloads | Each runs independently. Sub-script errors are noted but do not abort summary. |
+| `update.mjs` to plugin filesystem | Direct filesystem write to `$PLUGIN_ROOT` | Must never write outside plugin directory. Must never touch `~/.adi/config.json`. |
+
+---
 
 ## Sources
 
-- [Claude Code Skills Documentation](https://code.claude.com/docs/en/slash-commands) -- Official skill/command structure, frontmatter, discovery (HIGH confidence)
-- [Claude Code Plugins Documentation](https://code.claude.com/docs/en/plugins) -- Plugin manifest, directory structure, distribution (HIGH confidence)
-- [Claude Code Plugin Marketplaces](https://code.claude.com/docs/en/plugin-marketplaces) -- Marketplace creation, npm/GitHub sources (HIGH confidence)
-- [Azure DevOps REST API - Pull Requests](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-requests?view=azure-devops-rest-7.1) -- PR endpoints (HIGH confidence)
-- [Azure DevOps PAT Authentication](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops) -- Auth mechanism (HIGH confidence)
-- [Agent Skills Open Standard](https://agentskills.io) -- Cross-tool skill format that Claude Code follows (MEDIUM confidence)
+- Direct inspection of `scripts/ado-client.mjs` (v1.0, 181 LOC) — HIGH confidence
+- Direct inspection of `scripts/pr-metrics.mjs` (v1.0, 501 LOC) — HIGH confidence
+- Direct inspection of `scripts/config.mjs` (v1.0) — HIGH confidence
+- Direct inspection of `skills/pr-metrics/SKILL.md`, `skills/setup/SKILL.md`, `skills/help/SKILL.md` — HIGH confidence
+- Direct inspection of `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` — HIGH confidence
+- `.planning/PROJECT.md` — `adoGet` orphan warning, key decisions table — HIGH confidence
+
+---
+
+*Architecture research for: Azure DevOps Insights v1.1 — new skills integration*
+*Researched: 2026-02-25*
