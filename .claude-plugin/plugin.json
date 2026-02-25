@@ -1,0 +1,8 @@
+{
+  "name": "adi",
+  "description": "AI-narrated Azure DevOps project health reports",
+  "version": "1.0.0",
+  "author": { "name": "your-org" },
+  "repository": "https://github.com/your-org/azure-devops-insights",
+  "license": "MIT"
+}

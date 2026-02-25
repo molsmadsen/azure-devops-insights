@@ -1,0 +1,15 @@
+{
+  "name": "azure-devops-insights",
+  "owner": { "name": "your-org" },
+  "plugins": [
+    {
+      "name": "adi",
+      "source": {
+        "source": "github",
+        "repo": "your-org/azure-devops-insights"
+      },
+      "description": "AI-narrated Azure DevOps project health reports",
+      "version": "1.0.0"
+    }
+  ]
+}
