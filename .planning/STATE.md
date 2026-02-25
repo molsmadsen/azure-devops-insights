@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-25)
 
 ## Current Position
 
-Phase: 2 of 4 (PR Metrics)
-Plan: 2 of 3 in current phase
-Status: In progress — Plan 02-02 complete, moving to 02-03
-Last activity: 2026-02-25 -- Completed plan 02-02 (skills/pr-metrics/SKILL.md — AI narration wiring, human-verified end-to-end)
+Phase: 5 of 5 (Doc Cleanup)
+Plan: 1 of 1 in current phase
+Status: In progress — Plan 05-01 complete
+Last activity: 2026-02-25 -- Completed plan 05-01 (gap closure: help skill, README, 02-01-SUMMARY traceability)
 
-Progress: [██████░░░░] 50%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -37,6 +37,7 @@ Progress: [██████░░░░] 50%
 *Updated after each plan completion*
 | Phase 02-pr-metrics P01 | 148s | 2 tasks | 2 files |
 | Phase 02-pr-metrics P02 | 2min | 2 tasks | 1 file |
+| Phase 05-doc-cleanup P01 | 118s | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,8 @@ Recent decisions affecting current work:
 - [02-01]: 429 retry heuristic: all-empty batch triggers one retry after 2s (conservative, avoids false rate-limit positives)
 - [02-02]: Recommendations section conditional on data — only appears when actual issues found (aboveThresholdCount > 0, bottleneck != null, stalePrs.length > 0, or absentReviewers.length > 0); avoids filler on healthy repos
 - [02-02]: Human-verified end-to-end: narrative readable and correct; opens with PR/repo/window summary, all 5 data sections present, flags pass through, error paths confirmed
+- [05-01]: REQUIREMENTS.md verified as already correct before plan ran — no edit needed; all stale text previously corrected
+- [05-01]: 02-01-SUMMARY.md requirements-completed uses inline YAML list format matching existing tags field style
 
 ### Pending Todos
 
@@ -76,5 +79,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 02-02-PLAN.md (skills/pr-metrics/SKILL.md — AI narration wiring, human-verified end-to-end)
+Stopped at: Completed 05-01-PLAN.md (gap closure: promote /adi:pr-metrics in help + README, add requirements-completed traceability)
 Resume file: None

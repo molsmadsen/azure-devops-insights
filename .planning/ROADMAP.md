@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: PR Metrics** - First skill proving the end-to-end pattern with pull request analysis (completed 2026-02-25)
 - [ ] **Phase 3: Activity Skills** - Contributors and bugs skills following the proven pattern
 - [ ] **Phase 4: Project State & Distribution** - Sprint/summary synthesis and distribution polish
-- [ ] **Phase 5: v1.0 Doc & Traceability Cleanup** - Close all documentation gaps identified by milestone audit before v1.0 release
+- [x] **Phase 5: v1.0 Doc & Traceability Cleanup** - Close all documentation gaps identified by milestone audit before v1.0 release (completed 2026-02-25)
 
 ## Phase Details
 
@@ -118,4 +118,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 2. PR Metrics | 2/2 | Complete   | 2026-02-25 |
 | 3. Activity Skills | 0/0 | Not started | - |
 | 4. Project State & Distribution | 0/0 | Not started | - |
-| 5. v1.0 Doc & Traceability Cleanup | 0/1 | Not started | - |
+| 5. v1.0 Doc & Traceability Cleanup | 1/1 | Complete   | 2026-02-25 |
