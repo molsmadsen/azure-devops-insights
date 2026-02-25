@@ -9,18 +9,18 @@ See: .planning/PROJECT.md (updated 2026-02-25)
 
 ## Current Position
 
-Phase: 1 of 4 (Foundation)
-Plan: 4 of 4 in current phase
-Status: Phase complete — ready for Phase 2
-Last activity: 2026-02-25 -- Completed plan 01-04 (end-to-end verification, human approved all 6 steps)
+Phase: 2 of 4 (PR Metrics)
+Plan: 1 of 3 in current phase
+Status: In progress — Plan 02-01 complete, moving to 02-02
+Last activity: 2026-02-25 -- Completed plan 02-01 (ADO client PR functions + pr-metrics.mjs computation script)
 
-Progress: [████░░░░░░] 25%
+Progress: [█████░░░░░] 37%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 1.25 min
+- Total plans completed: 5
+- Average duration: 1.73 min
 - Total execution time: 0.1 hours
 
 **By Phase:**
@@ -28,12 +28,14 @@ Progress: [████░░░░░░] 25%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 4 | 5 min | 1.25 min |
+| 02-pr-metrics | 1 | 2 min | 2.47 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (1 min), 01-02 (1 min), 01-03 (2 min), 01-04 (1 min)
+- Last 5 plans: 01-01 (1 min), 01-02 (1 min), 01-03 (2 min), 01-04 (1 min), 02-01 (2 min)
 - Trend: On track
 
 *Updated after each plan completion*
+| Phase 02-pr-metrics P01 | 148s | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -54,6 +56,10 @@ Recent decisions affecting current work:
 - [01-03]: Plugin root resolver uses installed_plugins.json not CLAUDE_PLUGIN_ROOT — env var does not expand in SKILL.md bodies (confirmed bug); resolver reads ~/.claude/plugins/installed_plugins.json at runtime
 - [01-03]: setup.mjs dual-mode design — --read for cheap re-run detection (no network), --org/--project/--pat for validate+save; JSON-only stdout for skill narration
 - [01-04]: Phase 1 human-verified — all 6 steps approved; plugin loads, setup flow (happy path/errors/re-run), help listing, and README all confirmed correct
+- [02-01]: adoGetPrThreads tolerates per-PR failures (returns empty, no throw) — partial data is better than aborting the whole run
+- [02-01]: Thread fetching covers all PRs (not just active/completed subset) — needed for both staleness and first-review computation
+- [02-01]: Bottleneck selection: slow-reviewer type wins when slow and concentrated apply to different reviewers (most actionable signal)
+- [02-01]: 429 retry heuristic: all-empty batch triggers one retry after 2s (conservative, avoids false rate-limit positives)
 
 ### Pending Todos
 
@@ -67,5 +73,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 01-04-PLAN.md (end-to-end verification — human approved all 6 steps) — Phase 1 complete
+Stopped at: Completed 02-01-PLAN.md (PR data layer — ado-client PR functions + pr-metrics.mjs)
 Resume file: None

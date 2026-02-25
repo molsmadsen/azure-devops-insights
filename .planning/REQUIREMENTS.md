@@ -19,11 +19,11 @@
 
 ### PR Metrics
 
-- [ ] **PR-01**: `/ado:pr-metrics` reports average time from PR open to first review
-- [ ] **PR-02**: `/ado:pr-metrics` reports average time from PR open to merge (full cycle time)
-- [ ] **PR-03**: `/ado:pr-metrics` shows reviewer distribution -- who reviews most, who is absent from rotation
-- [ ] **PR-04**: `/ado:pr-metrics` flags stale PRs (open with no activity beyond a configurable threshold)
-- [ ] **PR-05**: `/ado:pr-metrics` detects review bottlenecks and names them in the narrative (e.g. one person reviewing 70%+ of PRs)
+- [x] **PR-01**: `/ado:pr-metrics` reports average time from PR open to first review
+- [x] **PR-02**: `/ado:pr-metrics` reports average time from PR open to merge (full cycle time)
+- [x] **PR-03**: `/ado:pr-metrics` shows reviewer distribution -- who reviews most, who is absent from rotation
+- [x] **PR-04**: `/ado:pr-metrics` flags stale PRs (open with no activity beyond a configurable threshold)
+- [x] **PR-05**: `/ado:pr-metrics` detects review bottlenecks and names them in the narrative (e.g. one person reviewing 70%+ of PRs)
 - [ ] **PR-06**: Output is a written AI narrative with findings, anomalies, and recommendations -- not raw numbers
 
 ### Contributors
@@ -80,11 +80,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-01 | Phase 1 | Complete |
 | AUTH-02 | Phase 1 | Complete |
 | AUTH-03 | Phase 1 | Complete |
-| PR-01 | Phase 2 | Pending |
-| PR-02 | Phase 2 | Pending |
-| PR-03 | Phase 2 | Pending |
-| PR-04 | Phase 2 | Pending |
-| PR-05 | Phase 2 | Pending |
+| PR-01 | Phase 2 | Complete |
+| PR-02 | Phase 2 | Complete |
+| PR-03 | Phase 2 | Complete |
+| PR-04 | Phase 2 | Complete |
+| PR-05 | Phase 2 | Complete |
 | PR-06 | Phase 2 | Pending |
 | CONT-01 | Phase 3 | Pending |
 | CONT-02 | Phase 3 | Pending |
