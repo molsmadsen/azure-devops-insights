@@ -24,15 +24,17 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Depends on**: Nothing (first phase)
 **Requirements**: DIST-01, AUTH-01, AUTH-02, AUTH-03
 **Success Criteria** (what must be TRUE):
-  1. User can install the plugin with `claude plugin add github:org/repo` and see skill commands available
-  2. User can run `/ado:setup`, enter their org URL, project name, and PAT, and have credentials stored in `~/.ado-insights/config.json`
+  1. User can install the plugin via `/plugin marketplace add your-org/azure-devops-insights` then `/plugin install adi@azure-devops-insights` and see `/adi:setup` and `/adi:help` commands available
+  2. User can run `/adi:setup`, enter their org URL, project name, and PAT, and have credentials stored in `~/.adi/config.json`
   3. Setup validates the PAT by making a test API call and reports clearly whether it succeeded or which permissions are missing
-  4. User can re-run `/ado:setup` to change credentials without losing existing config
-**Plans**: TBD
+  4. User can re-run `/adi:setup` to change credentials without losing existing config
+**Plans**: 4 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md — Plugin scaffold: plugin.json, marketplace.json, README, CHANGELOG
+- [ ] 01-02-PLAN.md — Shared scripts: config.mjs (config read/write/mask), ado-client.mjs (API client with PAT auth and error classification)
+- [ ] 01-03-PLAN.md — Setup and help skills: setup.mjs, skills/setup/SKILL.md, skills/help/SKILL.md
+- [ ] 01-04-PLAN.md — End-to-end verification checkpoint
 
 ### Phase 2: PR Metrics
 **Goal**: User can run `/ado:pr-metrics` and receive a clear AI narrative about their pull request health
@@ -84,7 +86,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/0 | Not started | - |
+| 1. Foundation | 0/4 | Not started | - |
 | 2. PR Metrics | 0/0 | Not started | - |
 | 3. Activity Skills | 0/0 | Not started | - |
 | 4. Project State & Distribution | 0/0 | Not started | - |
