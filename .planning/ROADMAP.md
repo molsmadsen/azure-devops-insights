@@ -37,19 +37,19 @@ Plans:
 - [ ] 01-04-PLAN.md — End-to-end verification checkpoint
 
 ### Phase 2: PR Metrics
-**Goal**: User can run `/ado:pr-metrics` and receive a clear AI narrative about their pull request health
+**Goal**: User can run `/adi:pr-metrics` and receive a clear AI narrative about their pull request health
 **Depends on**: Phase 1
 **Requirements**: PR-01, PR-02, PR-03, PR-04, PR-05, PR-06
 **Success Criteria** (what must be TRUE):
-  1. User runs `/ado:pr-metrics` and sees time-to-first-review and full cycle time (open to merge) averages
+  1. User runs `/adi:pr-metrics` and sees time-to-first-review and full cycle time (open to merge) averages
   2. User sees who reviews the most and who is absent from the review rotation
   3. User sees stale PRs flagged (open with no activity beyond threshold) and review bottlenecks named in the narrative
   4. Output is a written AI narrative with findings, anomalies, and actionable recommendations -- not raw numbers or tables
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — Extend ado-client.mjs with PR fetch functions + create pr-metrics.mjs computation script
+- [ ] 02-02-PLAN.md — Create skills/pr-metrics/SKILL.md + end-to-end verification checkpoint
 
 ### Phase 3: Activity Skills
 **Goal**: User can analyze contributor activity and bug health through AI-narrated reports
@@ -87,6 +87,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/4 | Complete   | 2026-02-25 |
-| 2. PR Metrics | 0/0 | Not started | - |
+| 2. PR Metrics | 0/2 | Planned | - |
 | 3. Activity Skills | 0/0 | Not started | - |
 | 4. Project State & Distribution | 0/0 | Not started | - |
