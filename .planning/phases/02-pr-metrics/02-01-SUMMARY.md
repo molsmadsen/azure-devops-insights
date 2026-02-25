@@ -3,6 +3,7 @@ phase: 02-pr-metrics
 plan: 01
 subsystem: data-layer
 tags: [ado-api, pr-metrics, computation, node-esm]
+requirements-completed: [PR-01, PR-02, PR-03, PR-04, PR-05]
 dependency_graph:
   requires: [scripts/ado-client.mjs, scripts/config.mjs]
   provides: [scripts/pr-metrics.mjs, scripts/ado-client.mjs (extended)]
