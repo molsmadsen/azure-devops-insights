@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-02-25)
 ## Current Position
 
 Phase: 1 of 4 (Foundation)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-25 -- Completed plan 01-02 (config.mjs + ado-client.mjs)
+Last activity: 2026-02-25 -- Completed plan 01-03 (setup.mjs + /adi:setup + /adi:help skills)
 
-Progress: [██░░░░░░░░] 12%
+Progress: [███░░░░░░░] 18%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 1 min
+- Total plans completed: 3
+- Average duration: 1.3 min
 - Total execution time: 0.1 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation | 2 | 2 min | 1 min |
+| 01-foundation | 3 | 4 min | 1.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (1 min), 01-02 (1 min)
+- Last 5 plans: 01-01 (1 min), 01-02 (1 min), 01-03 (2 min)
 - Trend: On track
 
 *Updated after each plan completion*
@@ -51,6 +51,8 @@ Recent decisions affecting current work:
 - [01-02]: HTTP 203 treated as auth error — Azure DevOps returns 203 (login redirect) on wrong PAT encoding; explicit status check required since response.ok is true for 203
 - [01-02]: Two-step validateConnection — org-level projects check (URL + PAT), then project-level git/repos (Code Read scope); typed error objects distinguish network/auth/permission/not_found
 - [01-02]: Colon prefix centralized in buildAuthHeader — Buffer.from(':' + pat.trim()) prevents common mistake of encoding PAT without colon prefix
+- [01-03]: Plugin root resolver uses installed_plugins.json not CLAUDE_PLUGIN_ROOT — env var does not expand in SKILL.md bodies (confirmed bug); resolver reads ~/.claude/plugins/installed_plugins.json at runtime
+- [01-03]: setup.mjs dual-mode design — --read for cheap re-run detection (no network), --org/--project/--pat for validate+save; JSON-only stdout for skill narration
 
 ### Pending Todos
 
@@ -58,11 +60,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- Need to validate `${CLAUDE_PLUGIN_ROOT}` variable behavior for script paths in installed plugins (Phase 1)
+- RESOLVED: `${CLAUDE_PLUGIN_ROOT}` does not expand in SKILL.md bodies — mitigated by installed_plugins.json resolver pattern (01-03)
 - Azure DevOps API rate limits for PAT-authenticated requests unclear (monitor during Phase 2)
 
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 01-01-PLAN.md (plugin scaffold: manifest, marketplace.json, README, CHANGELOG) — SUMMARY created
+Stopped at: Completed 01-03-PLAN.md (setup.mjs + /adi:setup skill + /adi:help skill) — SUMMARY created
 Resume file: None

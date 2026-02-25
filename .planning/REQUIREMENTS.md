@@ -13,9 +13,9 @@
 
 ### Setup & Auth
 
-- [ ] **AUTH-01**: User can run `/ado:setup` to configure org URL, project name, and PAT -- stored securely (OS credential store / keychain)
+- [x] **AUTH-01**: User can run `/ado:setup` to configure org URL, project name, and PAT -- stored securely (OS credential store / keychain)
 - [x] **AUTH-02**: Setup validates the PAT has sufficient permissions by making a test API call and reports which scopes are missing
-- [ ] **AUTH-03**: User can re-run `/ado:setup` to reconfigure credentials without data loss
+- [x] **AUTH-03**: User can re-run `/ado:setup` to reconfigure credentials without data loss
 
 ### PR Metrics
 
@@ -77,9 +77,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | DIST-01 | Phase 1 | Complete |
-| AUTH-01 | Phase 1 | Pending |
+| AUTH-01 | Phase 1 | Complete |
 | AUTH-02 | Phase 1 | Complete |
-| AUTH-03 | Phase 1 | Pending |
+| AUTH-03 | Phase 1 | Complete |
 | PR-01 | Phase 2 | Pending |
 | PR-02 | Phase 2 | Pending |
 | PR-03 | Phase 2 | Pending |
