@@ -12,7 +12,7 @@ This roadmap delivers a Claude Code plugin that ships AI-narrated Azure DevOps r
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Plugin scaffold, setup skill, and API client that connects to Azure DevOps
+- [x] **Phase 1: Foundation** - Plugin scaffold, setup skill, and API client that connects to Azure DevOps (completed 2026-02-25)
 - [ ] **Phase 2: PR Metrics** - First skill proving the end-to-end pattern with pull request analysis
 - [ ] **Phase 3: Activity Skills** - Contributors and bugs skills following the proven pattern
 - [ ] **Phase 4: Project State & Distribution** - Sprint/summary synthesis and distribution polish
@@ -86,7 +86,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 3/4 | In Progress|  |
+| 1. Foundation | 4/4 | Complete   | 2026-02-25 |
 | 2. PR Metrics | 0/0 | Not started | - |
 | 3. Activity Skills | 0/0 | Not started | - |
 | 4. Project State & Distribution | 0/0 | Not started | - |
