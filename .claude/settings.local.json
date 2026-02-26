@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(node C:/Users/7N_TSM/.claude/get-shit-done/bin/gsd-tools.cjs commit \"docs: initialize project\" --files .planning/PROJECT.md)",
+      "Bash(git add .planning/PROJECT.md)",
+      "Bash(git commit -m \"docs: initialize project\")",
+      "Bash(git add .planning/config.json)",
+      "Bash(git commit -m \"chore: add project config\")",
+      "Bash(git add .planning/research/)",
+      "Bash(git commit -m \"docs: add domain research \\(stack, features, architecture, pitfalls\\)\")",
+      "Bash(git add .planning/REQUIREMENTS.md)",
+      "Bash(git commit -m \"docs: define v1 requirements\")",
+      "Bash(cd:*)"
+    ]
+  }
+}
