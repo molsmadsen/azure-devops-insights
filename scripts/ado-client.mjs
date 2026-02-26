@@ -213,6 +213,74 @@ export async function adoGetProject(config) {
   return response.json();
 }
 
+export async function adoWiql(config, query, top = 500) {
+  const orgBase = config.orgUrl.replace(/\/$/, '');
+  const url = new URL(`${orgBase}/${config.project}/_apis/wit/wiql`);
+  url.searchParams.set('api-version', API_VERSION);
+  if (top) url.searchParams.set('$top', String(top));
+  let response;
+  try {
+    response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Authorization': buildAuthHeader(config.pat),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ query })
+    });
+  } catch (err) {
+    throw Object.assign(new Error('Network error: cannot reach ' + config.orgUrl + '. Check the org URL.'), { type: 'network' });
+  }
+  if (response.status === 401 || response.status === 203) {
+    throw Object.assign(new Error('PAT rejected. The token may be expired, invalid, or wrongly encoded.'), { type: 'auth' });
+  }
+  if (response.status === 403) {
+    throw Object.assign(new Error('PAT lacks Work Items (Read) permission.'), { type: 'permission' });
+  }
+  if (!response.ok) {
+    throw Object.assign(new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`), { type: 'api' });
+  }
+  return response.json();
+}
+
+export async function adoGetWorkItemsBatch(config, ids, fields) {
+  const orgBase = config.orgUrl.replace(/\/$/, '');
+  const chunkSize = 200;
+  const allItems = [];
+
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const url = new URL(`${orgBase}/${config.project}/_apis/wit/workitemsbatch`);
+    url.searchParams.set('api-version', API_VERSION);
+    let response;
+    try {
+      response = await fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          'Authorization': buildAuthHeader(config.pat),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ids: chunk, fields, errorPolicy: 'omit' })
+      });
+    } catch (err) {
+      throw Object.assign(new Error('Network error: cannot reach ' + config.orgUrl + '. Check the org URL.'), { type: 'network' });
+    }
+    if (response.status === 401 || response.status === 203) {
+      throw Object.assign(new Error('PAT rejected. The token may be expired, invalid, or wrongly encoded.'), { type: 'auth' });
+    }
+    if (response.status === 403) {
+      throw Object.assign(new Error('PAT lacks Work Items (Read) permission.'), { type: 'permission' });
+    }
+    if (!response.ok) {
+      throw Object.assign(new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`), { type: 'api' });
+    }
+    const data = await response.json();
+    allItems.push(...(data.value || []));
+  }
+
+  return { value: allItems };
+}
+
 export async function validateConnection(orgUrl, project, pat) {
   const orgBase = orgUrl.replace(/\/$/, '');
   const headers = { 'Authorization': buildAuthHeader(pat), 'Content-Type': 'application/json' };
