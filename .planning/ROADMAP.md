@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0** — Phases 1, 2, 5 (shipped 2026-02-25)
-- 📋 **v1.1** — Phases 3, 4 (planned)
+- ✅ **v1.1** — Phases 3, 4 (shipped 2026-03-12)
 
 ## Phases
 
@@ -18,44 +18,15 @@ Full archive: `.planning/milestones/v1.0-ROADMAP.md`
 
 </details>
 
-### 📋 v1.1 (Planned)
+<details>
+<summary>✅ v1.1 — Activity Skills & Distribution (Phases 3, 4) — SHIPPED 2026-03-12</summary>
 
-- [ ] **Phase 3: Activity Skills** — Contributors and bugs skills following the proven pattern
-- [ ] **Phase 4: Project State & Distribution** — Sprint/summary synthesis and distribution polish
+- [x] Phase 3: Activity Skills (3/3 plans) — completed 2026-02-26
+- [x] Phase 4: Project State & Distribution (3/3 plans) — completed 2026-03-12
 
-### Phase 3: Activity Skills
+Full archive: `.planning/milestones/v1.1-ROADMAP.md`
 
-**Goal:** Ship `/adi:contributors` and `/adi:bugs` skills — two new Azure DevOps analysis skills that follow the proven pr-metrics pattern (data fetch → metrics computation → AI-narrated output).
-
-**Plans:** 3 plans
-
-Plans:
-- [ ] 03-01-PLAN.md — Extend ado-client.mjs with 5 new API functions (commits, team members, project, WIQL, work items batch)
-- [ ] 03-02-PLAN.md — Build /adi:contributors skill (script + SKILL.md)
-- [ ] 03-03-PLAN.md — Build /adi:bugs skill (script + SKILL.md)
-
-**Delivers:**
-- `/adi:contributors` — active, quiet, and former contributor analysis with team cross-referencing
-- `/adi:bugs` — open bugs by severity, age, assignment distribution, top 5 oldest unresolved
-- Shared flags (`--days`, `--repo`, `--anonymous`) consistent with existing skills
-- Conditional recommendations section (only when actionable issues found)
-
-### Phase 4: Project State & Distribution
-
-**Goal:** Ship `/adi:sprint`, `/adi:summary`, and `/adi:update` skills — completing the v1.1 skill collection with sprint analysis, cross-skill synthesis, and self-update capability.
-
-**Plans:** 3 plans
-
-Plans:
-- [ ] 04-01-PLAN.md — Build /adi:sprint skill (iteration API functions + sprint.mjs + SKILL.md)
-- [ ] 04-02-PLAN.md — Build /adi:update skill + distribution polish (help, metadata, README)
-- [ ] 04-03-PLAN.md — Build /adi:summary skill (cross-skill synthesis + SKILL.md)
-
-**Delivers:**
-- `/adi:sprint` — sprint completion, velocity tracking, backlog health, burndown analysis
-- `/adi:summary` — cross-skill synthesis with thematic narrative (Delivery Velocity, Team Health, Quality & Risk, Actionable Items)
-- `/adi:update` — git-based self-update with changelog
-- Distribution: `molsmadsen` org, version 1.1.0, complete help listing, full README
+</details>
 
 ## Progress
 
@@ -63,6 +34,6 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 1. Foundation | v1.0 | 4/4 | Complete | 2026-02-25 |
 | 2. PR Metrics | v1.0 | 2/2 | Complete | 2026-02-25 |
-| 3. Activity Skills | v1.1 | 0/3 | Planned | - |
-| 4. Project State & Distribution | v1.1 | 0/3 | Planned | - |
+| 3. Activity Skills | v1.1 | 3/3 | Complete | 2026-02-26 |
+| 4. Project State & Distribution | v1.1 | 3/3 | Complete | 2026-03-12 |
 | 5. Doc & Traceability Cleanup | v1.0 | 1/1 | Complete | 2026-02-25 |

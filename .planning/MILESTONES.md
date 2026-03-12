@@ -1,5 +1,28 @@
 # Milestones
 
+## v1.1 — Activity Skills & Distribution (Shipped: 2026-03-12)
+
+**Phases:** 3-4 (2 phases, 6 plans, 12 tasks)
+**Git range:** d3be91e → f38be1f
+**Timeline:** 15 days (2026-02-26 → 2026-03-12)
+**Files:** 17 files, 1,948 insertions | ~2,872 LOC total
+
+**Key accomplishments:**
+1. Extended ADO client with 7 new API functions (commits, teams, projects, WIQL, work items batch, iterations)
+2. `/adi:contributors` — active/quiet/former contributor classification with team cross-referencing
+3. `/adi:bugs` — open bug analysis with severity breakdown, age analysis, assignment distribution
+4. `/adi:sprint` — sprint completion, velocity trending, backlog health, burndown heuristic
+5. `/adi:summary` — cross-skill synthesis with cross-cutting thematic executive briefing
+6. `/adi:update` — git-based self-update with changelog; distribution polish (molsmadsen org, v1.1.0, full README)
+
+**Known Gaps:**
+- No REQUIREMENTS.md existed for v1.1 (requirements tracked in PROJECT.md Active section only)
+- No milestone audit performed
+
+**Archive:** `.planning/milestones/v1.1-ROADMAP.md`
+
+---
+
 ## v1.0 — Azure DevOps Insights MVP (Shipped: 2026-02-25)
 
 **Phases:** 1, 2, 5 (3 phases, 7 plans)
@@ -20,4 +43,3 @@
 **Archive:** `.planning/milestones/v1.0-ROADMAP.md` | `.planning/milestones/v1.0-REQUIREMENTS.md`
 
 ---
-
