@@ -5,8 +5,8 @@
     {
       "name": "adi",
       "source": {
-        "source": "github",
-        "repo": "molsmadsen/azure-devops-insights"
+        "source": "url",
+        "url": "https://github.com/molsmadsen/azure-devops-insights.git"
       },
       "description": "AI-narrated Azure DevOps project health reports",
       "version": "1.1.0"
