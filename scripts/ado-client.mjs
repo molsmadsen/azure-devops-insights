@@ -281,6 +281,61 @@ export async function adoGetWorkItemsBatch(config, ids, fields) {
   return { value: allItems };
 }
 
+export async function adoGetTeamIterations(config, teamId, timeframe = null) {
+  const orgBase = config.orgUrl.replace(/\/$/, '');
+  const url = new URL(`${orgBase}/${config.project}/${teamId}/_apis/work/teamsettings/iterations`);
+  url.searchParams.set('api-version', API_VERSION);
+  if (timeframe) url.searchParams.set('$timeframe', timeframe);
+  let response;
+  try {
+    response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': buildAuthHeader(config.pat),
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (err) {
+    throw Object.assign(new Error('Network error: cannot reach ' + config.orgUrl + '. Check the org URL.'), { type: 'network' });
+  }
+  if (response.status === 401 || response.status === 203) {
+    throw Object.assign(new Error('PAT rejected. The token may be expired, invalid, or wrongly encoded.'), { type: 'auth' });
+  }
+  if (response.status === 403) {
+    throw Object.assign(new Error('PAT lacks required permissions (HTTP 403). Check required scopes in /adi:setup.'), { type: 'permission' });
+  }
+  if (!response.ok) {
+    throw Object.assign(new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`), { type: 'api' });
+  }
+  return response.json();
+}
+
+export async function adoGetIterationWorkItems(config, teamId, iterationId) {
+  const orgBase = config.orgUrl.replace(/\/$/, '');
+  const url = new URL(`${orgBase}/${config.project}/${teamId}/_apis/work/teamsettings/iterations/${iterationId}/workitems`);
+  url.searchParams.set('api-version', API_VERSION);
+  let response;
+  try {
+    response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': buildAuthHeader(config.pat),
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (err) {
+    throw Object.assign(new Error('Network error: cannot reach ' + config.orgUrl + '. Check the org URL.'), { type: 'network' });
+  }
+  if (response.status === 401 || response.status === 203) {
+    throw Object.assign(new Error('PAT rejected. The token may be expired, invalid, or wrongly encoded.'), { type: 'auth' });
+  }
+  if (response.status === 403) {
+    throw Object.assign(new Error('PAT lacks required permissions (HTTP 403). Check required scopes in /adi:setup.'), { type: 'permission' });
+  }
+  if (!response.ok) {
+    throw Object.assign(new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`), { type: 'api' });
+  }
+  return response.json();
+}
+
 export async function validateConnection(orgUrl, project, pat) {
   const orgBase = orgUrl.replace(/\/$/, '');
   const headers = { 'Authorization': buildAuthHeader(pat), 'Content-Type': 'application/json' };
