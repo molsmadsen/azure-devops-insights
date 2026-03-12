@@ -44,6 +44,19 @@ Plans:
 
 **Goal:** Ship `/adi:sprint`, `/adi:summary`, and `/adi:update` skills — completing the v1.1 skill collection with sprint analysis, cross-skill synthesis, and self-update capability.
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Build /adi:sprint skill (iteration API functions + sprint.mjs + SKILL.md)
+- [ ] 04-02-PLAN.md — Build /adi:update skill + distribution polish (help, metadata, README)
+- [ ] 04-03-PLAN.md — Build /adi:summary skill (cross-skill synthesis + SKILL.md)
+
+**Delivers:**
+- `/adi:sprint` — sprint completion, velocity tracking, backlog health, burndown analysis
+- `/adi:summary` — cross-skill synthesis with thematic narrative (Delivery Velocity, Team Health, Quality & Risk, Actionable Items)
+- `/adi:update` — git-based self-update with changelog
+- Distribution: `molsmadsen` org, version 1.1.0, complete help listing, full README
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -51,5 +64,5 @@ Plans:
 | 1. Foundation | v1.0 | 4/4 | Complete | 2026-02-25 |
 | 2. PR Metrics | v1.0 | 2/2 | Complete | 2026-02-25 |
 | 3. Activity Skills | v1.1 | 0/3 | Planned | - |
-| 4. Project State & Distribution | v1.1 | 0/? | Not started | - |
+| 4. Project State & Distribution | v1.1 | 0/3 | Planned | - |
 | 5. Doc & Traceability Cleanup | v1.0 | 1/1 | Complete | 2026-02-25 |
