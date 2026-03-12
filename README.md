@@ -58,16 +58,89 @@ On success, you will see a confirmation with your org and project name, and a no
 | `/adi:setup` | Configure your Azure DevOps connection (org URL, project name, PAT). Run this first. Re-run to update credentials. |
 | `/adi:help` | List all available commands and their purpose. |
 | `/adi:pr-metrics` | AI-narrated pull request health report — review times, stale PRs, bottlenecks. |
+| `/adi:contributors` | Contributor activity analysis — active, quiet, and former members. |
+| `/adi:bugs` | Open bug health report — severity, age, assignment distribution. |
+| `/adi:sprint` | Current sprint health — completion, velocity, backlog, burndown. |
+| `/adi:summary` | Full project health synthesis across all analysis skills. |
+| `/adi:update` | Update the plugin to the latest version via git pull. |
 
-### Coming Soon (Phase 3+)
+### `/adi:pr-metrics`
 
-| Command | Description |
-|---------|-------------|
-| `/adi:contributors` | Contributor activity and commit distribution |
-| `/adi:bugs` | Bug trend and open issue summary |
-| `/adi:sprint` | Current sprint health and completion forecast |
-| `/adi:summary` | Full project health report combining all metrics |
-| `/adi:update` | Refresh all cached data from Azure DevOps |
+Pull request health report with review speed, cycle time, reviewer participation, bottleneck detection, and stale PR identification.
+
+```
+/adi:pr-metrics
+/adi:pr-metrics --days=90 --repo=my-api
+```
+
+**Flags:**
+- `--repo <name>` — Filter to a single repository
+- `--days <n>` — Time window in days (default: 30)
+- `--stale-days <n>` — Days of inactivity before a PR is considered stale (default: 3)
+- `--project <name>` — Override Azure DevOps project from config
+
+### `/adi:contributors`
+
+Contributor activity analysis showing active, quiet, and former team members based on commit history.
+
+```
+/adi:contributors
+/adi:contributors --days=60 --anonymous
+```
+
+**Flags:**
+- `--days <n>` — Time window in days (default: 30)
+- `--repo <name>` — Filter to a single repository
+- `--anonymous` — Replace names and emails with generic labels
+
+### `/adi:bugs`
+
+Open bug health report with severity breakdown, age distribution, and assignment analysis.
+
+```
+/adi:bugs
+/adi:bugs --types=Bug,Defect --days=90
+```
+
+**Flags:**
+- `--types <list>` — Comma-separated work item types to include (default: Bug)
+- `--days <n>` — Time window in days for trend analysis
+
+### `/adi:sprint`
+
+Current sprint health including completion status, velocity tracking, backlog health, and burndown summary.
+
+```
+/adi:sprint
+/adi:sprint --sprints=5
+```
+
+**Flags:**
+- `--sprints <n>` — Number of past sprints for velocity trend (default: 3)
+
+### `/adi:summary`
+
+Full project health synthesis that runs all analysis skills and weaves results into a cross-cutting executive briefing.
+
+```
+/adi:summary
+/adi:summary --days=60 --repo=my-api --anonymous
+```
+
+**Flags:**
+- `--days <n>` — Time window in days (default: 30)
+- `--repo <name>` — Filter to a single repository
+- `--anonymous` — Replace names and emails with generic labels
+
+### `/adi:update`
+
+Update the plugin to the latest version by pulling from the git repository. Shows a changelog of new commits.
+
+```
+/adi:update
+```
+
+No flags. Pulls immediately and reports what changed.
 
 ---
 
